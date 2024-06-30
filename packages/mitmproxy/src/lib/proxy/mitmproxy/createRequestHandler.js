@@ -15,9 +15,13 @@ module.exports = function createRequestHandler (createIntercepts, middlewares, e
   return function requestHandler (req, res, ssl) {
     let proxyReq
 
-    const rOptions = commonUtil.getOptionsFormRequest(req, ssl, externalProxy)
+    const rOptions = commonUtil.getOptionsFromRequest(req, ssl, externalProxy)
 
-    rOptions.agent.options.rejectUnauthorized = setting.verifySsl
+    if (rOptions.agent) {
+      rOptions.agent.options.rejectUnauthorized = setting.verifySsl
+    } else if (rOptions.agent !== false) {
+      log.error('rOptions.agent 的值有问题:', rOptions)
+    }
 
     if (rOptions.headers.connection === 'close') {
       req.socket.setKeepAlive(false)
@@ -60,7 +64,7 @@ module.exports = function createRequestHandler (createIntercepts, middlewares, e
               if (!reqIncpt.requestIntercept) {
                 continue
               }
-              const goNext = reqIncpt.requestIntercept(context, req, res, ssl)
+              const goNext = reqIncpt.requestIntercept(context, req, res, ssl, next)
               if (goNext) {
                 next()
                 return
@@ -76,16 +80,16 @@ module.exports = function createRequestHandler (createIntercepts, middlewares, e
       })
     }
 
-    function countSlow (isDnsIntercept, type) {
+    function countSlow (isDnsIntercept, reason) {
       if (isDnsIntercept) {
         const { dns, ip, hostname } = isDnsIntercept
         dns.count(hostname, ip, true)
-        log.error('记录ip失败次数,用于优选ip：', hostname, ip, type)
+        log.error('记录ip失败次数,用于优选ip：', hostname, ip, reason)
       }
       const counter = context.requestCount
       if (counter != null) {
         counter.count.doCount(counter.value, true)
-        log.error('记录proxy失败次数：', counter.value, type)
+        log.error('记录proxy失败次数：', counter.value, reason)
       }
     }
 
@@ -105,8 +109,8 @@ module.exports = function createRequestHandler (createIntercepts, middlewares, e
 
         function onFree () {
           const url = `${rOptions.protocol}//${rOptions.hostname}:${rOptions.port}${rOptions.path}`
-          const start = new Date().getTime()
-          log.info('代理请求:', url, rOptions.method)
+          const start = new Date()
+          log.info('代理请求:', url, rOptions.method, rOptions.servername ? ', sni: ' + rOptions.servername : '')
           let isDnsIntercept
           if (dnsConfig) {
             const dns = DnsUtil.hasDnsLookup(dnsConfig, rOptions.hostname)
@@ -139,12 +143,11 @@ module.exports = function createRequestHandler (createIntercepts, middlewares, e
           // rOptions.agent.options.sigalgs = rOptions.sigalgs
           // rOptions.ciphers = 'TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-SHA384:DHE-RSA-AES256-SHA256:ECDHE-RSA-AES256-SHA256:HIGH'
           // rOptions.agent.options.ciphers = rOptions.ciphers
-          // console.log('rOptions:', rOptions)
-          // console.log('agent:', rOptions.agent)
-          // console.log('agent.options:', rOptions.agent.options)
+          // log.debug('rOptions:', rOptions.hostname + rOptions.path, '\r\n', rOptions)
+          // log.debug('agent:', rOptions.agent)
+          // log.debug('agent.options:', rOptions.agent.options)
           proxyReq = (rOptions.protocol === 'https:' ? https : http).request(rOptions, (proxyRes) => {
-            const end = new Date().getTime()
-            const cost = end - start
+            const cost = new Date() - start
             if (rOptions.protocol === 'https:') {
               log.info('代理请求返回:', url, cost + 'ms')
             }
@@ -155,9 +158,9 @@ module.exports = function createRequestHandler (createIntercepts, middlewares, e
             resolve(proxyRes)
           })
 
+          // 代理请求的事件监听
           proxyReq.on('timeout', () => {
-            const end = new Date().getTime()
-            const cost = end - start
+            const cost = new Date() - start
             log.error('代理请求超时', rOptions.protocol, rOptions.hostname, rOptions.path, cost + 'ms')
             countSlow(isDnsIntercept, 'to slow  ' + cost + 'ms')
             proxyReq.end()
@@ -166,18 +169,14 @@ module.exports = function createRequestHandler (createIntercepts, middlewares, e
             error.status = 408
             reject(error)
           })
-
           proxyReq.on('error', (e) => {
-            const end = new Date().getTime()
-            const cost = end - start
+            const cost = new Date() - start
             log.error('代理请求错误', e.code, e.message, rOptions.hostname, rOptions.path, cost + 'ms')
             countSlow(isDnsIntercept, 'error:' + e.message)
             reject(e)
           })
-
           proxyReq.on('aborted', () => {
-            const end = new Date().getTime()
-            const cost = end - start
+            const cost = new Date() - start
             log.error('代理请求被取消', rOptions.hostname, rOptions.path, cost + 'ms')
 
             if (cost > MAX_SLOW_TIME) {
@@ -190,6 +189,7 @@ module.exports = function createRequestHandler (createIntercepts, middlewares, e
             reject(new Error('代理请求被取消'))
           })
 
+          // 原始请求的事件监听
           req.on('aborted', function () {
             log.error('请求被取消', rOptions.hostname, rOptions.path)
             proxyReq.abort()
@@ -216,6 +216,7 @@ module.exports = function createRequestHandler (createIntercepts, middlewares, e
       await requestInterceptorPromise()
 
       if (res.writableEnded) {
+        // log.info('res is writableEnded, return false')
         return false
       }
 
@@ -225,8 +226,8 @@ module.exports = function createRequestHandler (createIntercepts, middlewares, e
       //   // console.log('BODY: ')
       // })
       proxyRes.on('error', (error) => {
-        countSlow(null, 'error:' + error.message)
-        log.error('proxy res error', error)
+        countSlow(null, 'error: ' + error.message)
+        log.error('proxy res error:', error)
       })
 
       const responseInterceptorPromise = new Promise((resolve, reject) => {
@@ -247,12 +248,21 @@ module.exports = function createRequestHandler (createIntercepts, middlewares, e
             let head = ''
             let body = ''
             for (const resIncpt of resIncpts) {
-              const append = resIncpt.responseIntercept(context, req, res, proxyReq, proxyRes, ssl)
-              if (append && append.head) {
-                head += append.head
+              const append = resIncpt.responseIntercept(context, req, res, proxyReq, proxyRes, ssl, next)
+              // 判断是否已经关闭
+              if (res.writableEnded) {
+                next()
+                return
               }
-              if (append && append.body) {
-                body += append.body
+              if (append) {
+                if (append.head) {
+                  head += append.head
+                }
+                if (append.body) {
+                  body += append.body
+                }
+              } else if (append === false) {
+                break // 返回false表示终止拦截器，跳出循环
               }
             }
             InsertScriptMiddleware.responseInterceptor(req, res, proxyReq, proxyRes, ssl, next, {
@@ -284,21 +294,31 @@ module.exports = function createRequestHandler (createIntercepts, middlewares, e
         })
 
         if (proxyRes.statusCode >= 400) {
-          countSlow(null, 'status return :' + proxyRes.statusCode)
+          countSlow(null, 'Status return: ' + proxyRes.statusCode)
         }
         res.writeHead(proxyRes.statusCode)
         proxyRes.pipe(res)
       }
     })().catch(e => {
       if (!res.writableEnded) {
-        const status = e.status || 500
-        res.writeHead(status, { 'Content-Type': 'text/html;charset=UTF8' })
-        res.write(`DevSidecar Error:<br/>
+        try {
+          const status = e.status || 500
+          res.writeHead(status, { 'Content-Type': 'text/html;charset=UTF8' })
+          res.write(`DevSidecar Error:<br/>
 目标网站请求错误：【${e.code}】 ${e.message}<br/>
 目标地址：${rOptions.protocol}//${rOptions.hostname}:${rOptions.port}${rOptions.path}`
-        )
-        res.end()
-        log.error('request error', e.message)
+          )
+        } catch (e) {
+          // do nothing
+        }
+
+        try {
+          res.end()
+        } catch (e) {
+          // do nothing
+        }
+
+        log.error('Request error:', e)
       }
     })
   }

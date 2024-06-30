@@ -34,7 +34,7 @@ const ProxyPlugin = function (context) {
         log.info('关闭系统代理成功')
         return true
       } catch (err) {
-        log.error('关闭系统代理失败', err)
+        log.error('关闭系统代理失败:', err)
         return false
       }
     },
@@ -54,7 +54,161 @@ module.exports = {
     name: '系统代理',
     use: 'local',
     other: [],
-    setEnv: false
+    setEnv: false,
+    excludeIpList: {
+      // region 常用国内可访问域名
+
+      // 中国大陆
+      '*.cn': true,
+      'cn.*': true,
+      '*china*': true,
+
+      // Github加速源：以下加速源代理后反而出现问题，从系统代理中排除掉
+      '*.kkgithub.com': true,
+      '*.ghproxy.*': true,
+
+      // CSDN
+      '*.csdn.net': true,
+
+      // 百度
+      '*.baidu.com': true,
+      '*.baiducontent.com': true,
+      '*.bdimg.com': true,
+      '*.bdstatic.com': true,
+      '*.bdydns.com': true,
+
+      // 腾讯
+      '*.tencent.com': true,
+      '*.qq.com': true,
+      '*.weixin.com': true,
+      '*.weixinbridge.com': true,
+      '*.wechat.com': true,
+      '*.idqqimg.com': true,
+      '*.gtimg.com': true,
+      '*.qpic.com': true,
+      '*.qlogo.com': true,
+      '*.myapp.com': true,
+
+      // 阿里
+      '*.aliyun.com': true,
+      '*.alipay.com': true,
+      '*.taobao.com': true,
+      '*.tmall.com': true,
+      '*.alipayobjects.com': true,
+      '*.dingtalk.com': true,
+      '*.mmstat.com': true,
+      '*.alicdn.com': true,
+      '*.hdslb.com': true,
+
+      // Gitee
+      'gitee.com': true,
+      '*.gitee.com': true,
+      '*.gitee.io': true,
+      '*.giteeusercontent.com': true,
+
+      // Mozilla Firefox
+      '*.mozilla.org': true,
+      '*.mozilla.com': true,
+      '*.mozilla.net': true,
+      '*.firefox.com': true,
+      '*.firefox.org': true,
+      '*.mozillademos.org': true,
+      '*.mozillians.org': true,
+      '*.mozillians.net': true,
+      '*.mozillians.com': true,
+
+      // OSS
+      '*.sonatype.org': true,
+      // Maven镜像
+      '*.maven.org': true,
+      // Maven Repository
+      '*.mvnrepository.com': true,
+
+      // 苹果
+      '*.apple.com': true,
+      '*.icloud.com': true,
+
+      // 微软
+      '*.microsoft.com': true,
+      '*.windows.com': true,
+      '*.office.com': true,
+      '*.office.net': true,
+      '*.live.com': true,
+      '*.msn.com': true,
+
+      // WPS
+      '*.wps.com': true,
+      '*.wps.net': true,
+      '*.ksord.com': true,
+
+      // 奇虎
+      '*.qihoo.com': true,
+      '*.qihucdn.com': true,
+      // 360
+      '*.360.com': true,
+      '*.360safe.com': true,
+      '*.360buyimg.com': true,
+      '*.360buy.com': true,
+
+      // 京东
+      '*.jd.com': true,
+      '*.jcloud.com': true,
+      '*.jcloudcs.com': true,
+      '*.jcloudcache.com': true,
+      '*.jcloudcdn.com': true,
+      '*.jcloudlb.com': true,
+
+      // 哔哩哔哩
+      '*.bilibili.com': true,
+      '*.bilivideo.com': true,
+      '*.biliapi.net': true,
+
+      // 移动
+      '*.10086.com': true,
+      '*.10086cloud.com': true,
+
+      // 移动：139邮箱
+      '*.139.com': true,
+
+      // 迅雷
+      '*.xunlei.com': true,
+
+      // 网站ICP备案查询
+      '*.icpapi.com': true,
+
+      // cloudflare
+      'challenges.cloudflare.com': true,
+
+      // endregion
+
+      // 本地地址，无需代理
+      localhost: true,
+      'localhost.*': true, // 部分VPN会在host中添加这种格式的域名指向127.0.0.1，所以也排除掉
+      '127.*': true,
+      'test.*': true, // 本地开发时，测试用的虚拟域名格式，无需代理
+
+      // 服务器端常用地址，无需代理
+      '10.*': true,
+      '172.16.*': true,
+      '172.17.*': true,
+      '172.18.*': true,
+      '172.19.*': true,
+      '172.20.*': true,
+      '172.21.*': true,
+      '172.22.*': true,
+      '172.23.*': true,
+      '172.24.*': true,
+      '172.25.*': true,
+      '172.26.*': true,
+      '172.27.*': true,
+      '172.28.*': true,
+      '172.29.*': true,
+      '172.30.*': true,
+      '172.31.*': true,
+
+      // 局域网地址，无需代理
+      '192.168.*': true
+    }
   },
   status: {
     enabled: false,

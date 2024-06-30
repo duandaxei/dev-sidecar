@@ -1,14 +1,18 @@
 const path = require('path')
+
 function getUserBasePath () {
   const userHome = process.env.USERPROFILE || process.env.HOME || '/'
   return path.resolve(userHome, './.dev-sidecar')
 }
+
 function getRootCaCertPath () {
   return getUserBasePath() + '/dev-sidecar.ca.crt'
 }
+
 function getRootCaKeyPath () {
   return getUserBasePath() + '/dev-sidecar.ca.key.pem'
 }
+
 module.exports = {
   app: {
     mode: 'default',
@@ -17,8 +21,11 @@ module.exports = {
     },
     remoteConfig: {
       enabled: true,
-      url: 'https://gitee.com/docmirror/dev-sidecar/raw/master/packages/core/src/config/remote_config.json5'
+      url: 'https://gitee.com/wangliang181230/dev-sidecar/raw/docmirror/packages/core/src/config/remote_config.json5'
     },
+    theme: 'light', // 主题：light=亮色, dark=暗色
+    autoChecked: true, // 是否自动检查更新
+    skipPreRelease: true, // 是否忽略预发布版本
     dock: {
       hideWhenWinClose: false
     },
@@ -47,70 +54,107 @@ module.exports = {
     },
     intercepts: {
       'github.com': {
-        '/.*/.*/releases/download/': {
-          redirect: 'download.fastgit.org',
-          desc: 'release文件加速下载跳转地址'
-        },
-        '/.*/.*/archive/': {
-          redirect: 'download.fastgit.org'
-        },
-        '/.*/.*/blame/': {
-          redirect: 'hub.fastgit.org'
-        },
-        '^/[^/]+/[^/]+(/releases(/.*)?)?$': {
-          script: [
-            'github'
-          ],
-          desc: 'clone加速复制链接脚本'
-        },
-        '/.*': {
-          proxy: 'github.com',
-          // proxy: 'gh.docmirror.top/_proxy',
-          desc: '目前禁掉sni就可以直接访问，如果后续github.com的ip被封锁，只能再走proxy模式',
+        '.*': {
           sni: 'baidu.com'
+        },
+        '^(/[\\w-.]+){2,}/?(\\?.*)?$': {
+          // 篡改猴插件地址，以下是高速镜像地址
+          tampermonkeyScript: 'https://mirror.ghproxy.com/https://raw.githubusercontent.com/docmirror/dev-sidecar/scripts/tampermonkey.js',
+          // Github油猴脚本地址，以下是高速镜像地址
+          script: 'https://mirror.ghproxy.com/https://raw.githubusercontent.com/docmirror/dev-sidecar/scripts/GithubEnhanced-High-Speed-Download.user.js',
+          remark: '注：上面所使用的脚本地址，为高速镜像地址。',
+          desc: '油猴脚本：高速下载 Git Clone/SSH、Release、Raw、Code(ZIP) 等文件 (公益加速)、项目列表单文件快捷下载、添加 git clone 命令'
+        },
+        // 以下三项暂时先注释掉，因为已经有油猴脚本提供高速下载地址了。
+        // '/.*/.*/releases/download/': {
+        //   redirect: 'gh.api.99988866.xyz/https://github.com',
+        //   desc: 'release文件加速下载跳转地址'
+        // },
+        // '/.*/.*/archive/': {
+        //   redirect: 'gh.api.99988866.xyz/https://github.com'
+        // },
+        // 以下代理地址不支持该类资源的代理，暂时注释掉
+        // '/.*/.*/blame/': {
+        //   redirect: 'gh.api.99988866.xyz/https://github.com'
+        // },
+        '/fluidicon.png': {
+          cacheDays: 365,
+          desc: 'Github那只猫的图片，缓存1年'
+        },
+        '^(/[^/]+){2}/pull/\\d+/open_with_menu.*$': {
+          cacheDays: 7,
+          desc: 'PR详情页：标题右边那个Code按钮的HTML代理请求地址，感觉上应该可以缓存。暂时先设置为缓存7天'
+        },
+        '^((/[^/]+){2,})/raw((/[^/]+)+\\.(jpg|jpeg|png|gif))(\\?.*)?$': {
+          // eslint-disable-next-line no-template-curly-in-string
+          proxy: 'https://raw.githubusercontent.com${m[1]}${m[3]}',
+          cacheDays: 7,
+          desc: '仓库内图片，重定向改为代理，并缓存7天。'
+        },
+        '^((/[^/]+){2,})/raw((/[^/]+)+\\.js)(\\?.*)?$': {
+          // eslint-disable-next-line no-template-curly-in-string
+          proxy: 'https://raw.githubusercontent.com${m[1]}${m[3]}',
+          responseReplace: { headers: { 'content-type': 'application/javascript; charset=utf-8' } },
+          desc: '仓库内脚本，重定向改为代理，并设置响应头Content-Type。作用：方便script拦截器直接使用，避免引起跨域问题和脚本内容限制问题。'
         }
-        // '/.*/.*/raw11/': {
-        //   replace: '(.+)\\/raw\\/(.+)',
-        //   proxy: 'raw.fastgit.org$1/$2',
-        //   sni: 'baidu.com'
-        // }
       },
       'github-releases.githubusercontent.com': {
         '.*': {
-          proxy: 'github-releases.githubusercontent.com',
           sni: 'baidu.com'
         }
       },
       'github.githubassets.com': {
         '.*': {
-          proxy: 'github.githubassets.com',
-          backup: [
-            'assets.fastgit.org'
-          ],
-          sni: 'assets.fastgit.org'
+          sni: 'baidu.com'
+        }
+      },
+      'camo.githubusercontent.com': {
+        '.*': {
+          sni: 'baidu.com'
+        },
+        '^[a-zA-Z0-9/]+(\\?.*)?$': {
+          cacheDays: 365,
+          desc: '图片，缓存1年'
+        }
+      },
+      'collector.github.com': {
+        '.*': {
+          sni: 'baidu.com'
         }
       },
       'customer-stories-feed.github.com': {
         '.*': { proxy: 'customer-stories-feed.fastgit.org' }
       },
-
       'raw.githubusercontent.com': {
         '.*': {
-          proxy: 'raw.githubusercontent.com',
           sni: 'baidu.com'
         }
-        // '.*': { proxy: 'raw.fastgit.org' }
       },
       'user-images.githubusercontent.com': {
         '.*': {
-          proxy: 'user-images.githubusercontent.com',
           sni: 'baidu.com'
+        },
+        '^/.*\\.png(\\?.*)?$': {
+          cacheDays: 365,
+          desc: '用户在PR或issue等内容中上传的图片，缓存1年。注：每张图片都有唯一的ID，不会重复，可以安心缓存'
+        }
+      },
+      'private-user-images.githubusercontent.com': {
+        '.*': {
+          sni: 'baidu.com'
+        },
+        '^/.*\\.png(\\?.*)?$': {
+          cacheHours: 1,
+          desc: '用户在PR或issue等内容中上传的图片，缓存1小时就够了，因为每次刷新页面都是不一样的链接。'
         }
       },
       'avatars.githubusercontent.com': {
         '.*': {
-          proxy: 'avatars.githubusercontent.com',
           sni: 'baidu.com'
+        },
+        '^/u/\\d+(\\?.*)?$': {
+          cacheDays: 365,
+          desc: '用户头像，缓存1年'
         }
       },
       'api.github.com': {
@@ -119,9 +163,25 @@ module.exports = {
           desc: 'github的访问速度分析上传，没有必要，直接返回成功'
         }
       },
-      // 'v2ex.com': {
+      'hub.docker.com': {
+        '.*': {
+          sni: 'baidu.com'
+        }
+      },
+      'api.dso.docker.com': {
+        '.*': {
+          sni: 'baidu.com'
+        }
+      },
+      'login.docker.com': {
+        '/favicon.ico': {
+          proxy: 'hub.docker.com',
+          sni: 'baidu.com',
+          desc: '登录页面的ico，采用hub.docker.com的'
+        }
+      },
+      // '*.v2ex.com': {
       //   '.*': {
-      //     proxy: 'v2ex.com',
       //     sni: 'baidu.com'
       //   }
       // },
@@ -132,6 +192,9 @@ module.exports = {
         //   proxy: 'gg.docmirror.top/_yxorp',
         //   desc: '呀，被你发现了，偷偷的用，别声张'
         // }
+      },
+      'www.gstatic.com': {
+        '/recaptcha/.*': { proxy: 'www.recaptcha.net' }
       },
       'ajax.googleapis.com': {
         '.*': {
@@ -188,21 +251,29 @@ module.exports = {
           abort: true,
           desc: '广告拦截'
         }
+      },
+      '*': {
+        '^.*\\?DS_DOWNLOAD$': {
+          requestReplace: { doDownload: true },
+          responseReplace: { doDownload: true },
+          desc: '下载请求拦截：移除请求地址中的 `?DS_DOWNLOAD`，并设置响应头 `Content-Disposition: attachment; filename=xxxx`，使浏览器强制执行下载逻辑，而不是在浏览器中浏览。'
+        }
       }
     },
     whiteList: {
-      'apple.com': true,
+      '*.cn': true,
+      'cn.*': true,
+      '*china*': true,
+      '*.dingtalk.com': true,
       '*.apple.com': true,
-      'microsoft.com': true,
       '*.microsoft.com': true,
-      'alipay.com': true,
       '*.alipay.com': true,
-      'pay.weixin.qq.com': true,
-      'www.baidu.com': true
+      '*.qq.com': true,
+      '*.baidu.com': true
     },
-    // sniList: {
+    sniList: {
     //   'github.com': 'abaidu.com'
-    // },
+    },
     dns: {
       providers: {
         aliyun: {
@@ -227,30 +298,27 @@ module.exports = {
         }
       },
       mapping: {
-        // 'assets.fastgit.org': 'usa',
+        '*.github.com': 'quad9',
+        '*github*.com': 'quad9',
+        '*.github.io': 'quad9',
+        '*.docker.com': 'quad9',
+        '*.stackoverflow.com': 'quad9',
         '*.electronjs.org': 'quad9',
-        '*amazonaws.com': 'quad9',
-        '*githubusercontent.com': 'quad9',
-        '*yarnpkg.com': 'quad9',
-        '*cloudfront.net': 'quad9',
-        '*cloudflare.com': 'quad9',
-        '*github.io': 'quad9',
+        '*.amazonaws.com': 'quad9',
+        '*.yarnpkg.com': 'quad9',
+        '*.cloudfront.net': 'quad9',
+        '*.cloudflare.com': 'quad9',
         'img.shields.io': 'quad9',
-        '*.githubusercontent.com': 'quad9',
-        '*.githubassets.com': 'quad9',
-        // "解决push的时候需要输入密码的问题",
-        'github.com': 'quad9',
-        '*github.com': 'quad9',
         '*.vuepress.vuejs.org': 'quad9',
-        'gh.docmirror.top': 'quad9',
-        '*v2ex.com': 'quad9',
-        '*pypi.org': 'quad9',
-        '*jetbrains.com': 'quad9',
-        '*azureedge.net': 'quad9'
+        '*.gh.docmirror.top': 'quad9',
+        '*.v2ex.com': 'quad9',
+        '*.pypi.org': 'quad9',
+        '*.jetbrains.com': 'quad9',
+        '*.azureedge.net': 'quad9'
       },
       speedTest: {
         enabled: true,
-        interval: 60000,
+        interval: 300000,
         hostnameList: ['github.com'],
         dnsProviders: ['usa', 'quad9', 'rubyfish']
       }

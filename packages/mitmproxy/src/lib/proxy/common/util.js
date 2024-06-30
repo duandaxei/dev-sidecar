@@ -19,7 +19,30 @@ let socketId = 0
 
 let httpsOverHttpAgent, httpOverHttpsAgent, httpsOverHttpsAgent
 
-util.getOptionsFormRequest = (req, ssl, externalProxy = null) => {
+util.parseHostnameAndPort = (host, defaultPort) => {
+  let arr = host.match(/^(\[[^\]]+\])(?::(\d+))?$/) // 尝试解析IPv6
+  if (arr) {
+    arr = arr.slice(1)
+    if (arr[1]) {
+      arr[1] = parseInt(arr[1], 10)
+    }
+  } else {
+    arr = host.split(':')
+    if (arr.length > 1) {
+      arr[1] = parseInt(arr[1], 10)
+    }
+  }
+
+  if (defaultPort > 0 && (arr.length === 1 || arr[1] === undefined)) {
+    arr[1] = defaultPort
+  } else if (arr.length === 2 && arr[1] === undefined) {
+    arr.pop()
+  }
+
+  return arr
+}
+
+util.getOptionsFromRequest = (req, ssl, externalProxy = null) => {
   // eslint-disable-next-line node/no-deprecated-api
   const urlObject = url.parse(req.url)
   const defaultPort = ssl ? 443 : 80
@@ -34,13 +57,13 @@ util.getOptionsFormRequest = (req, ssl, externalProxy = null) => {
       try {
         externalProxyUrl = externalProxy(req, ssl)
       } catch (e) {
-        log.error('externalProxy', e)
+        log.error('externalProxy error:', e)
       }
     }
   }
 
   delete headers['proxy-connection']
-  let agent = false
+  let agent
   if (!externalProxyUrl) {
     // keepAlive
     if (headers.connection !== 'close') {
@@ -50,16 +73,23 @@ util.getOptionsFormRequest = (req, ssl, externalProxy = null) => {
         agent = httpAgent
       }
       headers.connection = 'keep-alive'
+    } else {
+      agent = false
     }
   } else {
     agent = util.getTunnelAgent(protocol === 'https:', externalProxyUrl)
   }
 
+  // 解析host和port
+  const arr = util.parseHostnameAndPort(req.headers.host)
+
+  // 初始化options
   const options = {
     protocol: protocol,
-    hostname: req.headers.host.split(':')[0],
     method: req.method,
-    port: req.headers.host.split(':')[1] || defaultPort,
+    url: req.url,
+    hostname: arr[0],
+    port: arr[1] || defaultPort,
     path: urlObject.path,
     headers: req.headers,
     agent: agent
@@ -125,7 +155,7 @@ util.getTunnelAgent = (requestIsSSL, externalProxyUrl) => {
       //             host: hostname,
       //             port: port
       //         }
-      //     });
+      //     })
       // }
       return false
     } else {
