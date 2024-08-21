@@ -141,7 +141,7 @@ function updateHandle (app, api, win, beforeQuit, quit, log) {
   // 检查更新
   const releasesApiUrl = 'https://api.github.com/repos/docmirror/dev-sidecar/releases'
   async function checkForUpdatesFromGitHub () {
-    request(releasesApiUrl, { headers: { 'User-Agent': 'DS/' + curVersion } }, (error, response, body) => {
+    request(releasesApiUrl, { headers: { 'User-Agent': 'DS/' + curVersion, 'Server-Name': 'baidu.com' } }, (error, response, body) => {
       try {
         if (error) {
           log.error('检查更新失败:', error)
@@ -203,7 +203,7 @@ function updateHandle (app, api, win, beforeQuit, quit, log) {
                 value: {
                   version,
                   releaseNotes: versionData.body
-                    ? (versionData.body.replace(/\r\n/g, '\n').replace(/https:\/\/github.com\/docmirror\/dev-sidecar/g, '').replace(/(?<=(^|\n))[ \t]*[ #]+/g, '') || '无')
+                    ? (versionData.body.replace(/\r\n/g, '\n').replace(/https:\/\/github.com\/docmirror\/dev-sidecar/g, '').replace(/(?<=(^|\n))[ \t]*[ #]*#\s*/g, '') || '无')
                     : '无'
                 }
               })

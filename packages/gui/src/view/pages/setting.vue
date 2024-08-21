@@ -11,6 +11,7 @@
         <a-checkbox v-model="config.app.autoStart.enabled" @change="onAutoStartChange">
           本应用开机自启
         </a-checkbox>
+        <a-button class="md-mr-10" icon="profile" @click="openLog()">日志</a-button>
         <div class="form-help">
           windows下建议开启开机自启。<a @click="openExternal('https://github.com/docmirror/dev-sidecar/blob/master/doc/recover.md')">更多说明参考</a>
         </div>
@@ -73,14 +74,13 @@
           <a-radio-button :value="false">
             不忽略
           </a-radio-button>
-          <div class="form-help">
-            预发布版本号为带有 “-” 的版本。注：该配置只对当前版本为正式版本时有效。
-          </div>
         </a-radio-group>
+        <div class="form-help">
+          预发布版本号为带有 “-” 的版本。注：该配置只对当前版本为正式版本时有效。
+        </div>
       </a-form-item>
       <a-form-item label="首页提示" :label-col="labelCol" :wrapper-col="wrapperCol">
-        <a-radio-group v-model="config.app.showShutdownTip"
-                       default-value="true" button-style="solid">
+        <a-radio-group v-model="config.app.showShutdownTip" default-value="true" button-style="solid">
           <a-radio-button :value="true">
             显示
           </a-radio-button>
@@ -93,8 +93,7 @@
         </div>
       </a-form-item>
       <a-form-item v-if="!isLinux()" label="关闭策略" :label-col="labelCol" :wrapper-col="wrapperCol">
-        <a-radio-group v-model="config.app.closeStrategy"
-                       default-value="0" button-style="solid">
+        <a-radio-group v-model="config.app.closeStrategy" default-value="0" button-style="solid">
           <a-radio-button :value="0">
             弹出提示
           </a-radio-button>
@@ -142,6 +141,10 @@ export default {
   methods: {
     ready (config) {
       this.themeBackup = config.app.theme
+    },
+    async openLog () {
+      const dir = await this.$api.info.getConfigDir()
+      this.$api.ipc.openPath(dir + '/logs/')
     },
     async applyAfter () {
       // 判断是否切换了主题
