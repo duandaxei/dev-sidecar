@@ -30,11 +30,15 @@
         </a-checkbox>
         <div class="form-help">
           应用启动时会向下面的地址请求配置补丁，获得最新的优化后的github访问体验。<br/>
-          如果您觉得远程更新配置有安全风险，请关闭此功能。
+          如果您觉得远程配置有安全风险，请关闭此功能，或删除共享远程配置，仅使用个人远程配置。<br/>
+          配置优先级：本地修改配置  >  个人远程配置  >  共享远程配置
         </div>
       </a-form-item>
-      <a-form-item label="远程配置地址" :label-col="labelCol" :wrapper-col="wrapperCol">
+      <a-form-item label="共享远程配置地址" :label-col="labelCol" :wrapper-col="wrapperCol">
         <a-input v-model="config.app.remoteConfig.url"></a-input>
+      </a-form-item>
+      <a-form-item label="个人远程配置地址" :label-col="labelCol" :wrapper-col="wrapperCol">
+        <a-input v-model="config.app.remoteConfig.personalUrl"></a-input>
       </a-form-item>
       <a-form-item label="重载远程配置" :label-col="labelCol" :wrapper-col="wrapperCol">
         <a-button :disabled="config.app.remoteConfig.enabled === false" :loading="reloadLoading" icon="sync" @click="reloadRemoteConfig()">重载远程配置</a-button>
@@ -52,32 +56,6 @@
             暗色
           </a-radio-button>
         </a-radio-group>
-      </a-form-item>
-      <a-form-item label="自动检查更新" :label-col="labelCol" :wrapper-col="wrapperCol">
-        <a-radio-group v-model="config.app.autoChecked" default-value="light" button-style="solid">
-          <a-radio-button :value="true">
-            开启
-          </a-radio-button>
-          <a-radio-button :value="false">
-            关闭
-          </a-radio-button>
-        </a-radio-group>
-        <div class="form-help">
-          开启自动检查更新后，每次应用启动时会检查一次更新，如有新版本，则会弹出提示。
-        </div>
-      </a-form-item>
-      <a-form-item label="忽略预发布版本" :label-col="labelCol" :wrapper-col="wrapperCol">
-        <a-radio-group v-model="config.app.skipPreRelease" default-value="light" button-style="solid">
-          <a-radio-button :value="true">
-            忽略
-          </a-radio-button>
-          <a-radio-button :value="false">
-            不忽略
-          </a-radio-button>
-        </a-radio-group>
-        <div class="form-help">
-          预发布版本号为带有 “-” 的版本。注：该配置只对当前版本为正式版本时有效。
-        </div>
       </a-form-item>
       <a-form-item label="首页提示" :label-col="labelCol" :wrapper-col="wrapperCol">
         <a-radio-group v-model="config.app.showShutdownTip" default-value="true" button-style="solid">
@@ -108,6 +86,32 @@
           点击窗口右上角关闭按钮的效果
         </div>
       </a-form-item>
+      <a-form-item label="自动检查更新" :label-col="labelCol" :wrapper-col="wrapperCol">
+        <a-radio-group v-model="config.app.autoChecked" default-value="light" button-style="solid">
+          <a-radio-button :value="true">
+            开启
+          </a-radio-button>
+          <a-radio-button :value="false">
+            关闭
+          </a-radio-button>
+        </a-radio-group>
+        <div class="form-help">
+          开启自动检查更新后，每次应用启动时会检查一次更新，如有新版本，则会弹出提示。
+        </div>
+      </a-form-item>
+      <a-form-item label="忽略预发布版本" :label-col="labelCol" :wrapper-col="wrapperCol">
+        <a-radio-group v-model="config.app.skipPreRelease" default-value="light" button-style="solid">
+          <a-radio-button :value="true">
+            忽略
+          </a-radio-button>
+          <a-radio-button :value="false">
+            不忽略
+          </a-radio-button>
+        </a-radio-group>
+        <div class="form-help">
+          预发布版本号为带有 “-” 的版本。注：该配置只对当前版本为正式版本时有效。
+        </div>
+      </a-form-item>
     </div>
     <template slot="footer">
       <div class="footer-bar">
@@ -130,7 +134,9 @@ export default {
       key: 'app',
       removeUserConfigLoading: false,
       reloadLoading: false,
-      themeBackup: null
+      themeBackup: null,
+      urlBackup: null,
+      personalUrlBackup: null
     }
   },
   created () {
@@ -141,15 +147,26 @@ export default {
   methods: {
     ready (config) {
       this.themeBackup = config.app.theme
+      this.urlBackup = config.app.remoteConfig.url
+      this.personalUrlBackup = config.app.remoteConfig.personalUrl
     },
     async openLog () {
       const dir = await this.$api.info.getConfigDir()
       this.$api.ipc.openPath(dir + '/logs/')
     },
     async applyAfter () {
-      // 判断是否切换了主题
+      let reloadLazy = 10
+
+      // 判断远程配置地址是否变更过，如果是则重载远程配置并重启服务
+      if (this.config.app.remoteConfig.url !== this.urlBackup || this.config.app.remoteConfig.personalUrl !== this.personalUrlBackup) {
+        await this.$api.config.downloadRemoteConfig()
+        await this.reloadConfigAndRestart()
+        reloadLazy = 300
+      }
+
+      // 判断是否切换了主题，如果是，则刷新页面
       if (this.config.app.theme !== this.themeBackup) {
-        window.location.reload()
+        setTimeout(() => window.location.reload(), reloadLazy)
       }
     },
     async openExternal (url) {
@@ -174,15 +191,20 @@ export default {
       }
     },
     async reloadRemoteConfig () {
+      if (this.config.app.remoteConfig.enabled === false) {
+        return
+      }
       this.reloadLoading = true
 
       const remoteConfig = {}
 
-      await this.$api.config.readRemoteConfigStr().then((ret) => { remoteConfig.old = ret })
+      await this.$api.config.readRemoteConfigStr().then((ret) => { remoteConfig.old1 = ret })
+      await this.$api.config.readRemoteConfigStr('_personal').then((ret) => { remoteConfig.old2 = ret })
       await this.$api.config.downloadRemoteConfig()
-      await this.$api.config.readRemoteConfigStr().then((ret) => { remoteConfig.new = ret })
+      await this.$api.config.readRemoteConfigStr().then((ret) => { remoteConfig.new1 = ret })
+      await this.$api.config.readRemoteConfigStr('_personal').then((ret) => { remoteConfig.new2 = ret })
 
-      if (remoteConfig.old === remoteConfig.new) {
+      if (remoteConfig.old1 === remoteConfig.new1 && remoteConfig.old2 === remoteConfig.new2) {
         this.$message.info('远程配置没有变化，不做任何处理。')
         this.$message.warn('如果您确实修改了远程配置，请稍等片刻再重试！')
       } else {
