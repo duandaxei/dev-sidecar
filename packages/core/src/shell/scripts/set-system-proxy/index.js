@@ -50,7 +50,14 @@ async function _winSetProxy (exec, ip, port, setEnv) {
 
   const proxyPath = extraPath.getProxyExePath()
   const execFun = 'global'
-  const proxyAddr = `http=http://${ip}:${port};https=http://${ip}:${port}`
+
+  // https
+  let proxyAddr = `https=http://${ip}:${port}`
+  // http
+  if (config.get().proxy.proxyHttp) {
+    proxyAddr = `http=http://${ip}:${port};` + proxyAddr
+  }
+
   log.info(`执行“设置系统代理”的程序: ${proxyPath} ${execFun} ${proxyAddr} ......(省略排除IP列表)`)
   await execFile(proxyPath, [execFun, proxyAddr, excludeIpStr])
 
@@ -87,14 +94,25 @@ const executor = {
     if (ip != null) {
       // const local = 'localhost, 127.0.0.0/8, ::1'
 
+      // https
       const setProxyCmd = [
         'gsettings set org.gnome.system.proxy mode manual',
-        `gsettings set org.gnome.system.proxy.https port ${port}`,
+        'gsettings set org.gnome.system.proxy.https enabled true',
         `gsettings set org.gnome.system.proxy.https host ${ip}`,
-        `gsettings set org.gnome.system.proxy.http port ${port}`,
-        `gsettings set org.gnome.system.proxy.http host ${ip}`
-        // `gsettings set org.gnome.system.proxy ignore-hosts "${local}"`
+        `gsettings set org.gnome.system.proxy.https port ${port}`
       ]
+      // http
+      if (config.get().proxy.proxyHttp) {
+        setProxyCmd[setProxyCmd.length] = 'gsettings set org.gnome.system.proxy.http enabled true'
+        setProxyCmd[setProxyCmd.length] = `gsettings set org.gnome.system.proxy.http host ${ip}`
+        setProxyCmd[setProxyCmd.length] = `gsettings set org.gnome.system.proxy.http port ${port}`
+      } else {
+        setProxyCmd[setProxyCmd.length] = 'gsettings set org.gnome.system.proxy.http enabled false'
+        setProxyCmd[setProxyCmd.length] = "gsettings set org.gnome.system.proxy.http host ''"
+        setProxyCmd[setProxyCmd.length] = 'gsettings set org.gnome.system.proxy.http port 0'
+      }
+      // ignore-hosts
+      // setProxyCmd[setProxyCmd.length] = `gsettings set org.gnome.system.proxy ignore-hosts "${local}"`
 
       await exec(setProxyCmd)
     } else {
@@ -111,8 +129,10 @@ const executor = {
     wifiAdaptor = wifiAdaptor.substring(wifiAdaptor.indexOf(' ')).trim()
     const { ip, port } = params
     if (ip == null) {
-      await exec(`networksetup -setwebproxystate '${wifiAdaptor}' off`)
+      // https
       await exec(`networksetup -setsecurewebproxystate '${wifiAdaptor}' off`)
+      // http
+      await exec(`networksetup -setwebproxystate '${wifiAdaptor}' off`)
 
       // const removeEnv = `
       // sed -ie '/export http_proxy/d' ~/.zshrc
@@ -121,8 +141,14 @@ const executor = {
       // `
       // await exec(removeEnv)
     } else {
-      await exec(`networksetup -setwebproxy '${wifiAdaptor}' ${ip} ${port}`)
+      // https
       await exec(`networksetup -setsecurewebproxy '${wifiAdaptor}' ${ip} ${port}`)
+      // http
+      if (config.get().proxy.proxyHttp) {
+        await exec(`networksetup -setwebproxy '${wifiAdaptor}' ${ip} ${port}`)
+      } else {
+        await exec(`networksetup -setwebproxystate '${wifiAdaptor}' off`)
+      }
 
       //       const setEnv = `cat <<ENDOF >>  ~/.zshrc
       // export http_proxy="http://${ip}:${port}"

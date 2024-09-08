@@ -64,3 +64,25 @@ ol{
 .ant-radio-button-wrapper {
   margin-bottom: 3px;
 }
+
+hr {
+  border-width: 2px 0 0 0;
+  border-style: solid;
+  border-color: #eee;
+}
+
+.ant-modal-content {
+  background-color: #fbfbfb;
+}
+
+.restore-factory-settings {
+  div {
+    padding-left: 1em;
+  }
+  span {
+    display: inline-block;
+    background-color: #eee;
+    padding: 2px 5px;
+    margin: 0 5px 5px 5px;
+  }
+}
