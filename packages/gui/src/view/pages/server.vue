@@ -33,7 +33,7 @@
               <div class="form-help">你可以设置0.0.0.0，让其他电脑可以使用此代理服务</div>
             </a-form-item>
             <a-form-item label="代理端口" :label-col="labelCol" :wrapper-col="wrapperCol">
-              <a-input v-model="config.server.port"/>
+              <a-input-number v-model="config.server.port" :min="0" :max="65535"/>
               <div class="form-help">修改后需要重启应用</div>
             </a-form-item>
             <a-form-item label="全局校验SSL" :label-col="labelCol" :wrapper-col="wrapperCol">
@@ -81,7 +81,7 @@
                 <a-button style="margin-left:8px" type="primary" icon="plus" @click="addWhiteList()"/>
               </a-col>
             </a-row>
-            <a-row :gutter="10" style="margin-top: 10px" v-for="(item,index) of whiteList" :key='index'>
+            <a-row :gutter="10" style="margin-top: 5px" v-for="(item,index) of whiteList" :key='index'>
               <a-col :span="19">
                 <a-input :disabled="item.value === false" v-model="item.key"></a-input>
               </a-col>
@@ -109,7 +109,7 @@
                 <a-button style="margin-left:8px" type="primary" icon="plus" @click="addDnsMapping()"/>
               </a-col>
             </a-row>
-            <a-row :gutter="10" style="margin-top: 10px" v-for="(item,index) of dnsMappings" :key='index'>
+            <a-row :gutter="10" style="margin-top: 5px" v-for="(item,index) of dnsMappings" :key='index'>
               <a-col :span="14">
                 <a-input :disabled="item.value === false" v-model="item.key"></a-input>
               </a-col>
