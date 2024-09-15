@@ -14,9 +14,9 @@
             启用
           </a-checkbox>
           <div class="form-help">
-            这是什么功能？你懂的！偷偷的用，别声张。(<b>注：请不要看视频，流量挺小的</b>)<br/>
-            建议按右上角的<i>“</i>原理说明<i>”</i>自建二层代理服务端。<br/>
-            声明：仅供技术学习与探讨！
+            这是什么功能？你懂的！偷偷的用，别声张。<code><i>注：请不要看视频，流量挺小的！</i></code><br/>
+            建议参照右上角的<code>原理说明</code>，自建二层代理服务端，并在此页下方配置<code>代理服务端</code>。<br/>
+            声明：此功能仅供技术学习与探讨！
           </div>
         </a-form-item>
         <hr/>
@@ -38,7 +38,7 @@
         <a-form-item label="远程PAC文件地址" :label-col="labelCol" :wrapper-col="wrapperCol">
           <a-input v-model="config.plugin.overwall.pac.pacFileUpdateUrl"/>
           <div class="form-help">
-            远程PAC文件内容可以是 base64 编码格式，也可以是未经过编码的
+            远程PAC文件内容可以是<code>base64</code>编码格式，也可以是未经过编码的
           </div>
         </a-form-item>
         <hr/>

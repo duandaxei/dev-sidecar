@@ -24,6 +24,38 @@ let hideDockWhenWinClose = DevSidecar.api.config.get().app.dock.hideWhenWinClose
 protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { secure: true, standard: true } }
 ])
+
+function openDevTools () {
+  try {
+    log.debug('尝试打开 `开发者工具`')
+    win.webContents.openDevTools()
+    log.debug('打开 `开发者工具` 成功')
+  } catch (e) {
+    log.error('打开 `开发者工具` 失败:', e)
+  }
+}
+
+function closeDevTools () {
+  try {
+    log.debug('尝试关闭 `开发者工具`')
+    win.webContents.closeDevTools()
+    log.debug('关闭 `开发者工具` 成功')
+  } catch (e) {
+    log.error('关闭 `开发者工具` 失败:', e)
+  }
+}
+
+function switchDevTools () {
+  if (!win || !win.webContents) {
+    return
+  }
+  if (win.webContents.isDevToolsOpened()) {
+    closeDevTools()
+  } else {
+    openDevTools()
+  }
+}
+
 // 隐藏主窗口，并创建托盘，绑定关闭事件
 function setTray () {
   // const topMenu = Menu.buildFromTemplate({})
@@ -32,17 +64,10 @@ function setTray () {
   // 通常被添加到一个 context menu 上.
   // 系统托盘右键菜单
   const trayMenuTemplate = [
-
     {
       // 系统托盘图标目录
-      label: 'DevTools',
-      click: () => {
-        try {
-          win.webContents.openDevTools()
-        } catch (e) {
-          log.error('win.webContents.openDevTools() error:', e)
-        }
-      }
+      label: 'DevTools (F12)',
+      click: switchDevTools
     },
     {
       // 系统托盘图标目录
@@ -161,7 +186,9 @@ function createWindow (startHideWindow) {
   if (process.env.WEBPACK_DEV_SERVER_URL) {
     // Load the url of the dev server if in development mode
     win.loadURL(process.env.WEBPACK_DEV_SERVER_URL)
-    if (!process.env.IS_TEST) win.webContents.openDevTools()
+    if (!process.env.IS_TEST) {
+      setTimeout(openDevTools, 2000)
+    }
   } else {
     createProtocol('app')
     // Load the index.html when not in development
@@ -211,6 +238,14 @@ function createWindow (startHideWindow) {
   win.on('session-end', async (e) => {
     log.info('session-end:', e)
     await quit()
+  })
+
+  // 监听键盘事件
+  win.webContents.on('before-input-event', (event, input) => {
+    // 按 F12，打开/关闭 开发者工具
+    if (input.key === 'F12' && input.type === 'keyUp') {
+      switchDevTools()
+    }
   })
 }
 
