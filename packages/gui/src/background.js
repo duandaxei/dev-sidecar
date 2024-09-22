@@ -1,7 +1,7 @@
 'use strict'
 /* global __static */
 import path from 'path'
-import { app, protocol, BrowserWindow, Menu, Tray, ipcMain, dialog, powerMonitor, nativeImage, nativeTheme } from 'electron'
+import { app, protocol, BrowserWindow, Menu, Tray, ipcMain, dialog, powerMonitor, nativeImage, nativeTheme, globalShortcut } from 'electron'
 import { createProtocol } from 'vue-cli-plugin-electron-builder/lib'
 import backend from './bridge/backend'
 import DevSidecar from '@docmirror/dev-sidecar'
@@ -15,6 +15,7 @@ const isDevelopment = process.env.NODE_ENV !== 'production'
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
 let win
+let winIsHidden = false
 // eslint-disable-next-line no-unused-vars
 let tray // 防止被内存清理
 let forceClose = false
@@ -134,13 +135,14 @@ function isLinux () {
 function hideWin () {
   if (win) {
     if (isLinux()) {
-      quit(app)
+      quit()
       return
     }
     win.hide()
     if (isMac && hideDockWhenWinClose) {
       app.dock.hide()
     }
+    winIsHidden = true
   }
 }
 
@@ -151,6 +153,7 @@ function showWin () {
   if (app.dock) {
     app.dock.show()
   }
+  winIsHidden = false
 }
 
 function changeAppConfig (config) {
@@ -179,6 +182,7 @@ function createWindow (startHideWindow) {
     // eslint-disable-next-line no-undef
     icon: path.join(__static, 'icon.png')
   })
+  winIsHidden = !!startHideWindow
 
   Menu.setApplicationMenu(null)
   win.setMenu(null)
@@ -218,7 +222,7 @@ function createWindow (startHideWindow) {
     }
     e.preventDefault()
     if (isLinux()) {
-      quit(app)
+      quit()
       return
     }
     const config = DevSidecar.api.config.get()
@@ -243,7 +247,7 @@ function createWindow (startHideWindow) {
   // 监听键盘事件
   win.webContents.on('before-input-event', (event, input) => {
     // 按 F12，打开/关闭 开发者工具
-    if (input.key === 'F12' && input.type === 'keyUp') {
+    if (input.key === 'F12' && input.type === 'keyUp' && !input.control && !input.alt && !input.shift && !input.meta) {
       switchDevTools()
     }
   })
@@ -261,13 +265,44 @@ async function quit () {
   app.quit()
 }
 
-// eslint-disable-next-line no-unused-vars
-function setDock () {
+function initApp () {
   if (isMac) {
     app.whenReady().then(() => {
       app.dock.setIcon(path.join(__dirname, '../build/mac/512x512.png'))
     })
   }
+
+  // 全局监听快捷键，用于 显示/隐藏 窗口
+  app.whenReady().then(async () => {
+    const showHideShortcut = DevSidecar.api.config.get().app.showHideShortcut
+    if (showHideShortcut && showHideShortcut !== '无' && showHideShortcut.length > 1) {
+      try {
+        const registerSuccess = globalShortcut.register(DevSidecar.api.config.get().app.showHideShortcut, () => {
+          if (winIsHidden || !win.isFocused()) {
+            if (!win.isFocused()) {
+              win.focus()
+            }
+            if (winIsHidden) {
+              showWin()
+            }
+          } else {
+            // linux，快捷键不关闭窗口
+            if (!isLinux()) {
+              hideWin()
+            }
+          }
+        })
+
+        if (registerSuccess) {
+          log.info('注册快捷键成功:', DevSidecar.api.config.get().app.showHideShortcut)
+        } else {
+          log.error('注册快捷键失败:', DevSidecar.api.config.get().app.showHideShortcut)
+        }
+      } catch (e) {
+        log.error('注册快捷键异常:', DevSidecar.api.config.get().app.showHideShortcut, ', error:', e)
+      }
+    }
+  })
 }
 // -------------执行开始---------------
 app.disableHardwareAcceleration() // 禁用gpu
@@ -301,9 +336,13 @@ if (!isFirstInstance) {
   app.on('before-quit', async (event) => {
     log.info('before-quit')
     if (process.platform === 'darwin') {
-      quit(app)
+      quit()
     }
   })
+  app.on('will-quit', () => {
+    globalShortcut.unregisterAll();
+    log.info('应用关闭，注销所有快捷键')
+  });
   app.on('second-instance', (event, commandLine, workingDirectory) => {
     log.info('new app started, command:', commandLine)
     if (win) {
@@ -318,7 +357,7 @@ if (!isFirstInstance) {
     // On macOS it is common for applications and their menu bar
     // to stay active until the user quits explicitly with Cmd + Q
     if (process.platform !== 'darwin') {
-      quit(app)
+      quit()
     }
   })
 
@@ -332,7 +371,7 @@ if (!isFirstInstance) {
     }
   })
 
-  // setDock()
+  // initApp()
 
   // This method will be called when Electron has finished
   // initialization and is ready to create browser windows.
@@ -369,19 +408,19 @@ if (!isFirstInstance) {
   })
 }
 
-setDock()
+initApp()
 
 // Exit cleanly on request from parent process in development mode.
 if (isDevelopment) {
   if (process.platform === 'win32') {
     process.on('message', (data) => {
       if (data === 'graceful-exit') {
-        quit(app)
+        quit()
       }
     })
   } else {
     process.on('SIGINT', () => {
-      quit(app)
+      quit()
     })
   }
 }
