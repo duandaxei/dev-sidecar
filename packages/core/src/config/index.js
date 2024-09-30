@@ -129,12 +129,12 @@ module.exports = {
         }
       },
       'camo.githubusercontent.com': {
-        '.*': {
-          sni: 'baidu.com'
-        },
         '^[a-zA-Z0-9/]+(\\?.*)?$': {
           cacheDays: 365,
           desc: '图片，缓存1年'
+        },
+        '.*': {
+          sni: 'baidu.com'
         }
       },
       'collector.github.com': {
@@ -181,6 +181,9 @@ module.exports = {
         '^/_private/browser/stats$': {
           success: true,
           desc: 'github的访问速度分析上传，没有必要，直接返回成功'
+        },
+        '.*': {
+          sni: 'baidu.com'
         }
       },
       'hub.docker.com': {
@@ -341,9 +344,6 @@ module.exports = {
         '185.199.109.153',
         '185.199.110.153',
         '185.199.111.153'
-      ],
-      'collector.github.com': [
-        '0.0.0.0'
       ]
     },
     whiteList: {
