@@ -1,4 +1,5 @@
 const https = require('https')
+const http = require('http')
 const tlsUtils = require('./tlsUtils')
 const CertAndKeyContainer = require('./CertAndKeyContainer')
 const forge = require('node-forge')
@@ -6,6 +7,17 @@ const pki = forge.pki
 // const colors = require('colors')
 const tls = require('tls')
 const log = require('../../../utils/util.log')
+const compatible = require('../compatible/compatible')
+
+function arraysHaveSameElements (arr1, arr2) {
+  if (arr1.length !== arr2.length) {
+    return false
+  }
+  const sortedArr1 = [...arr1].sort()
+  const sortedArr2 = [...arr2].sort()
+  return sortedArr1.every((value, index) => value === sortedArr2[index])
+}
+
 module.exports = class FakeServersCenter {
   constructor ({ maxLength = 256, requestHandler, upgradeHandler, caCert, caKey, getCertSocketTimeout }) {
     this.queue = []
@@ -33,49 +45,73 @@ module.exports = class FakeServersCenter {
     return serverPromiseObj
   }
 
-  getServerPromise (hostname, port) {
+  getServerPromise (hostname, port, ssl, manualCompatibleConfig) {
+    if (port === 443 || port === 80) {
+      ssl = port === 443
+    } else if (ssl) {
+      // 兼容程序：1
+      const compatibleConfig = compatible.getConnectCompatibleConfig(hostname, port, manualCompatibleConfig)
+      if (compatibleConfig && compatibleConfig.ssl != null) {
+        ssl = compatibleConfig.ssl
+      }
+    }
+
+    log.info(`getServerPromise, hostname: ${hostname}:${port}, ssl: ${ssl}, protocol: ${ssl ? 'https' : 'http'}`)
+
     for (let i = 0; i < this.queue.length; i++) {
       const serverPromiseObj = this.queue[i]
-      const mappingHostNames = serverPromiseObj.mappingHostNames
-      for (let j = 0; j < mappingHostNames.length; j++) {
-        const DNSName = mappingHostNames[j]
-        if (tlsUtils.isMappingHostName(DNSName, hostname)) {
-          this.reRankServer(i)
-          return serverPromiseObj.promise
+      if (serverPromiseObj.port === port && serverPromiseObj.ssl === ssl) {
+        const mappingHostNames = serverPromiseObj.mappingHostNames
+        for (let j = 0; j < mappingHostNames.length; j++) {
+          const DNSName = mappingHostNames[j]
+          if (tlsUtils.isMappingHostName(DNSName, hostname)) {
+            this.reRankServer(i)
+            log.info(`Load promise from cache, hostname: ${hostname}:${port}, ssl: ${ssl}, serverPromiseObj: {"ssl":${serverPromiseObj.ssl},"port":${serverPromiseObj.port},"mappingHostNames":${JSON.stringify(serverPromiseObj.mappingHostNames)}}`)
+            return serverPromiseObj.promise
+          }
         }
       }
     }
 
     const serverPromiseObj = {
+      port,
+      ssl,
       mappingHostNames: [hostname] // temporary hostname
     }
 
     const promise = new Promise((resolve, reject) => {
       (async () => {
-        const certObj = await this.certAndKeyContainer.getCertPromise(hostname, port)
-        const cert = certObj.cert
-        const key = certObj.key
-        const certPem = pki.certificateToPem(cert)
-        const keyPem = pki.privateKeyToPem(key)
-        const fakeServer = new https.Server({
-          key: keyPem,
-          cert: certPem,
-          SNICallback: (hostname, done) => {
-            (async () => {
-              const certObj = await this.certAndKeyContainer.getCertPromise(hostname, port)
-              log.info(`sni callback: ${hostname}:${port}`)
-              done(null, tls.createSecureContext({
-                key: pki.privateKeyToPem(certObj.key),
-                cert: pki.certificateToPem(certObj.cert)
-              }))
-            })()
-          }
-        })
+        let fakeServer
+        let cert
+        let key
+        if (ssl) {
+          const certObj = await this.certAndKeyContainer.getCertPromise(hostname, port)
+          cert = certObj.cert
+          key = certObj.key
+          const certPem = pki.certificateToPem(cert)
+          const keyPem = pki.privateKeyToPem(key)
+          fakeServer = new https.Server({
+            key: keyPem,
+            cert: certPem,
+            SNICallback: (hostname, done) => {
+              (async () => {
+                const certObj = await this.certAndKeyContainer.getCertPromise(hostname, port)
+                log.info(`fakeServer SNICallback: ${hostname}:${port}`)
+                done(null, tls.createSecureContext({
+                  key: pki.privateKeyToPem(certObj.key),
+                  cert: pki.certificateToPem(certObj.cert)
+                }))
+              })()
+            }
+          })
+        } else {
+          fakeServer = new http.Server()
+        }
         const serverObj = {
           cert,
           key,
           server: fakeServer,
-          port: 0 // if prot === 0 ,should listen server's `listening` event.
+          port: 0 // if port === 0 ,should listen server's `listening` event.
         }
         serverPromiseObj.serverObj = serverObj
 
@@ -84,18 +120,29 @@ module.exports = class FakeServersCenter {
           serverObj.port = address.port
         })
         fakeServer.on('request', (req, res) => {
-          const ssl = true
           log.debug(`【fakeServer request - ${hostname}:${port}】\r\n----- req -----\r\n`, req, '\r\n----- res -----\r\n', res)
           this.requestHandler(req, res, ssl)
         })
+        let once = true
         fakeServer.on('listening', () => {
           log.debug(`【fakeServer listening - ${hostname}:${port}】no arguments...`)
-          serverPromiseObj.mappingHostNames = tlsUtils.getMappingHostNamesFromCert(certObj.cert)
+          if (cert && once) {
+            once = false
+            let newMappingHostNames = tlsUtils.getMappingHostNamesFromCert(cert)
+            newMappingHostNames = [...new Set(newMappingHostNames)]
+            if (!arraysHaveSameElements(serverPromiseObj.mappingHostNames, newMappingHostNames)) {
+              log.info(`【fakeServer listening - ${hostname}:${port}】Reset mappingHostNames: `, serverPromiseObj.mappingHostNames, '变更为', newMappingHostNames)
+              serverPromiseObj.mappingHostNames = newMappingHostNames
+            }
+          }
           resolve(serverObj)
         })
         fakeServer.on('upgrade', (req, socket, head) => {
-          const ssl = true
-          log.debug(`【fakeServer upgrade - ${hostname}:${port}】\r\n----- req -----\r\n`, req, '\r\n----- socket -----\r\n', socket, '\r\n----- head -----\r\n', head)
+          if (process.env.NODE_ENV === 'development') {
+            log.debug(`【fakeServer upgrade - ${hostname}:${port}】\r\n----- req -----\r\n`, req, '\r\n----- socket -----\r\n', socket, '\r\n----- head -----\r\n', head)
+          } else {
+            log.info(`【fakeServer upgrade - ${hostname}:${port}】`, req.url)
+          }
           this.upgradeHandler(req, socket, head, ssl)
         })
 
@@ -106,29 +153,47 @@ module.exports = class FakeServersCenter {
         fakeServer.on('clientError', (err, socket) => {
           // log.error(`【fakeServer clientError - ${hostname}:${port}】\r\n----- error -----\r\n`, err, '\r\n----- socket -----\r\n', socket)
           log.error(`【fakeServer clientError - ${hostname}:${port}】\r\n`, err)
+
+          // 兼容程序：1
+          if (port !== 443 && port !== 80) {
+            if (ssl === true && err.code.indexOf('ERR_SSL_') === 0) {
+              compatible.setConnectSsl(hostname, port, false)
+              log.error(`兼容程序：SSL异常，现设置为禁用ssl: ${hostname}:${port}, ssl = false`)
+            } else if (ssl === false && err.code === 'HPE_INVALID_METHOD') {
+              compatible.setConnectSsl(hostname, port, true)
+              log.error(`兼容程序：${err.code}，现设置为启用ssl: ${hostname}:${port}, ssl = true`)
+            }
+          }
         })
-        fakeServer.on('tlsClientError', (err, tlsSocket) => {
-          // log.error(`【fakeServer tlsClientError - ${hostname}:${port}】\r\n----- error -----\r\n`, err, '\r\n----- tlsSocket -----\r\n', tlsSocket)
-          log.error(`【fakeServer tlsClientError - ${hostname}:${port}】\r\n`, err)
-        })
+        if (ssl) {
+          fakeServer.on('tlsClientError', (err, tlsSocket) => {
+            if (err.code === 'ECONNRESET' || err.code === 'ETIMEDOUT') {
+              return // 在tlsClientError事件中，以上异常不记录日志
+            }
+            // log.error(`【fakeServer tlsClientError - ${hostname}:${port}】\r\n----- error -----\r\n`, err, '\r\n----- tlsSocket -----\r\n', tlsSocket)
+            log.error(`【fakeServer tlsClientError - ${hostname}:${port}】\r\n`, err)
+          })
+        }
 
         // 其他监听事件，只打印debug日志
         if (process.env.NODE_ENV === 'development') {
-          fakeServer.on('keylog', (line, tlsSocket) => {
-            log.debug(`【fakeServer keylog - ${hostname}:${port}】\r\n----- line -----\r\n`, line, '\r\n----- tlsSocket -----\r\n', tlsSocket)
-          })
-          // fakeServer.on('newSession', (sessionId, sessionData, callback) => {
-          //   log.debug('【fakeServer newSession - ${hostname}:${port}】\r\n----- sessionId -----\r\n', sessionId, '\r\n----- sessionData -----\r\n', sessionData, '\r\n----- callback -----\r\n', callback)
-          // })
-          // fakeServer.on('OCSPRequest', (certificate, issuer, callback) => {
-          //   log.debug('【fakeServer OCSPRequest - ${hostname}:${port}】\r\n----- certificate -----\r\n', certificate, '\r\n----- issuer -----\r\n', issuer, '\r\n----- callback -----\r\n', callback)
-          // })
-          // fakeServer.on('resumeSession', (sessionId, callback) => {
-          //   log.debug('【fakeServer resumeSession - ${hostname}:${port}】\r\n----- sessionId -----\r\n', sessionId, '\r\n----- callback -----\r\n', callback)
-          // })
-          fakeServer.on('secureConnection', (tlsSocket) => {
-            log.debug(`【fakeServer secureConnection - ${hostname}:${port}】\r\n----- tlsSocket -----\r\n`, tlsSocket)
-          })
+          if (ssl) {
+            fakeServer.on('keylog', (line, tlsSocket) => {
+              log.debug(`【fakeServer keylog - ${hostname}:${port}】\r\n----- line -----\r\n`, line, '\r\n----- tlsSocket -----\r\n', tlsSocket)
+            })
+            // fakeServer.on('newSession', (sessionId, sessionData, callback) => {
+            //   log.debug(`【fakeServer newSession - ${hostname}:${port}】\r\n----- sessionId -----\r\n`, sessionId, '\r\n----- sessionData -----\r\n', sessionData, '\r\n----- callback -----\r\n', callback)
+            // })
+            // fakeServer.on('OCSPRequest', (certificate, issuer, callback) => {
+            //   log.debug(`【fakeServer OCSPRequest - ${hostname}:${port}】\r\n----- certificate -----\r\n`, certificate, '\r\n----- issuer -----\r\n', issuer, '\r\n----- callback -----\r\n', callback)
+            // })
+            // fakeServer.on('resumeSession', (sessionId, callback) => {
+            //   log.debug(`【fakeServer resumeSession - ${hostname}:${port}】\r\n----- sessionId -----\r\n`, sessionId, '\r\n----- callback -----\r\n', callback)
+            // })
+            fakeServer.on('secureConnection', (tlsSocket) => {
+              log.debug(`【fakeServer secureConnection - ${hostname}:${port}】\r\n----- tlsSocket -----\r\n`, tlsSocket)
+            })
+          }
           fakeServer.on('close', () => {
             log.debug(`【fakeServer close - ${hostname}:${port}】no arguments...`)
           })
