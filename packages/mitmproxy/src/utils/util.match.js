@@ -62,40 +62,30 @@ function matchHostname (hostMap, hostname, action) {
   // 域名快速匹配：直接匹配 或者 两种前缀通配符匹配
   let value = hostMap.origin[hostname]
   if (value) {
-    log.info(`matchHostname: ${action}: '${hostname}' -> '${hostname}': ${JSON.stringify(value)}`)
+    log.info(`matchHostname: ${action}: '${hostname}' -> { "${hostname}": ${JSON.stringify(value)} }`)
     return value // 快速匹配成功
   }
   value = hostMap.origin['*' + hostname]
   if (value) {
-    log.info(`matchHostname: ${action}: '${hostname}' -> '*${hostname}': ${JSON.stringify(value)}`)
+    log.info(`matchHostname: ${action}: '${hostname}' -> { "*${hostname}": ${JSON.stringify(value)} }`)
     return value // 快速匹配成功
   }
   value = hostMap.origin['*.' + hostname]
   if (value) {
-    log.info(`matchHostname: ${action}: '${hostname}' -> '*.${hostname}': ${JSON.stringify(value)}`)
+    log.info(`matchHostname: ${action}: '${hostname}' -> { "*.${hostname}": ${JSON.stringify(value)} }`)
     return value // 快速匹配成功
   }
 
   // 通配符匹配 或 正则表达式匹配
-  for (const target in hostMap) {
-    if (target === 'origin') {
+  for (const regexp in hostMap) {
+    if (regexp === 'origin') {
       continue
     }
 
-    // if (target.indexOf('*') < 0 && target[0] !== '^') {
-    //   continue // 不是通配符匹配串，也不是正则表达式，跳过
-    // }
-
-    // 如果是通配符匹配串，转换为正则表达式
-    let regexp = target
-    // if (target[0] !== '^') {
-    //   regexp = domainRegexply(regexp)
-    // }
-
     // 正则表达式匹配
     if (hostname.match(regexp)) {
-      value = hostMap[target]
-      log.info(`matchHostname: ${action}: '${hostname}' -> '${target}': ${JSON.stringify(value)}`)
+      value = hostMap[regexp]
+      log.info(`matchHostname: ${action}: '${hostname}' -> { "${regexp}": ${JSON.stringify(value)} }`)
       return value
     }
   }
@@ -155,7 +145,7 @@ function matchHostnameAll (hostMap, hostname, action) {
     // 正则表达式匹配
     if (hostname.match(regexp)) {
       value = hostMap[target]
-      log.debug(`matchHostname-one: ${action}: '${hostname}' -> '${target}': ${JSON.stringify(value)}`)
+      log.debug(`matchHostname-one: ${action}: '${hostname}' -> { "${target}": ${JSON.stringify(value)} }`)
       values = merge(values, value)
     }
   }
@@ -164,19 +154,19 @@ function matchHostnameAll (hostMap, hostname, action) {
   // 优先级：2
   value = hostMap.origin['*' + hostname]
   if (value) {
-    log.debug(`matchHostname-one: ${action}: '${hostname}' -> '*${hostname}': ${JSON.stringify(value)}`)
+    log.debug(`matchHostname-one: ${action}: '${hostname}' -> { "*${hostname}": ${JSON.stringify(value)} }`)
     values = merge(values, value)
   }
   // 优先级：3
   value = hostMap.origin['*.' + hostname]
   if (value) {
-    log.debug(`matchHostname-one: ${action}: '${hostname}' -> '*.${hostname}': ${JSON.stringify(value)}`)
+    log.debug(`matchHostname-one: ${action}: '${hostname}' -> { "*.${hostname}": ${JSON.stringify(value)} }`)
     values = merge(values, value)
   }
   // 优先级：4，最高（注：优先级高的配置，可以覆盖优先级低的配置，甚至有空配置时，可以移除已有配置）
   value = hostMap.origin[hostname]
   if (value) {
-    log.debug(`matchHostname-one: ${action}: '${hostname}' -> '${hostname}': ${JSON.stringify(value)}`)
+    log.debug(`matchHostname-one: ${action}: '${hostname}' -> { "${hostname}": ${JSON.stringify(value)} }`)
     values = merge(values, value)
   }
 

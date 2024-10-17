@@ -4,10 +4,12 @@ const log = require('../../../utils/util.log')
 const DnsUtil = require('../../dns/index')
 const localIP = '127.0.0.1'
 const dnsLookup = require('./dnsLookup')
+const jsonApi = require('../../../json')
 
 function isSslConnect (sslConnectInterceptors, req, cltSocket, head) {
   for (const intercept of sslConnectInterceptors) {
     const ret = intercept(req, cltSocket, head)
+    log.debug(`拦截判断结果：${ret}, url: ${req.url}, intercept:`, intercept)
     if (ret === false || ret === true) {
       return ret
     }
@@ -43,13 +45,13 @@ module.exports = function createConnectHandler (sslConnectInterceptor, middlewar
         log.error(`----- fakeServer getServerPromise error: ${hostname}:${port}, error:`, e)
       })
     } else {
-      log.info(`未匹配到任何 sslConnectInterceptors，不拦截请求，直接连接目标服务器: ${hostname}:${port}, headers:`, req.headers)
-      connect(req, cltSocket, head, hostname, port, dnsConfig)
+      log.info(`不拦截请求，直连目标服务器: ${hostname}:${port}, headers:`, jsonApi.stringify2(req.headers))
+      connect(req, cltSocket, head, hostname, port, dnsConfig, true)
     }
   }
 }
 
-function connect (req, cltSocket, head, hostname, port, dnsConfig) {
+function connect (req, cltSocket, head, hostname, port, dnsConfig = null, isDirect = false) {
   // tunneling https
   // log.info('connect:', hostname, port)
   const start = new Date()
@@ -68,10 +70,11 @@ function connect (req, cltSocket, head, hostname, port, dnsConfig) {
       }
     }
     const proxySocket = net.connect(options, () => {
+      if (!isDirect) log.info('Proxy connect start:', hostport)
+
       cltSocket.write('HTTP/1.1 200 Connection Established\r\n' +
                 'Proxy-agent: dev-sidecar\r\n' +
                 '\r\n')
-      log.info('Proxy connect start:', hostport)
       proxySocket.write(head)
       proxySocket.pipe(cltSocket)
 

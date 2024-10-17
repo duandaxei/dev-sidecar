@@ -49,7 +49,7 @@ module.exports = class FakeServersCenter {
     if (port === 443 || port === 80) {
       ssl = port === 443
     } else if (ssl) {
-      // 兼容程序：1
+      // 自动兼容程序：1
       const compatibleConfig = compatible.getConnectCompatibleConfig(hostname, port, manualCompatibleConfig)
       if (compatibleConfig && compatibleConfig.ssl != null) {
         ssl = compatibleConfig.ssl
@@ -115,17 +115,18 @@ module.exports = class FakeServersCenter {
         }
         serverPromiseObj.serverObj = serverObj
 
+        const printDebugLog = false && process.env.NODE_ENV === 'development' // 开发过程中，如有需要可以将此参数临时改为true，打印所有事件的日志
         fakeServer.listen(0, () => {
           const address = fakeServer.address()
           serverObj.port = address.port
         })
         fakeServer.on('request', (req, res) => {
-          log.debug(`【fakeServer request - ${hostname}:${port}】\r\n----- req -----\r\n`, req, '\r\n----- res -----\r\n', res)
+          if (printDebugLog) log.debug(`【fakeServer request - ${hostname}:${port}】\r\n----- req -----\r\n`, req, '\r\n----- res -----\r\n', res)
           this.requestHandler(req, res, ssl)
         })
         let once = true
         fakeServer.on('listening', () => {
-          log.debug(`【fakeServer listening - ${hostname}:${port}】no arguments...`)
+          if (printDebugLog) log.debug(`【fakeServer listening - ${hostname}:${port}】no arguments...`)
           if (cert && once) {
             once = false
             let newMappingHostNames = tlsUtils.getMappingHostNamesFromCert(cert)
@@ -138,7 +139,7 @@ module.exports = class FakeServersCenter {
           resolve(serverObj)
         })
         fakeServer.on('upgrade', (req, socket, head) => {
-          if (process.env.NODE_ENV === 'development') {
+          if (printDebugLog) {
             log.debug(`【fakeServer upgrade - ${hostname}:${port}】\r\n----- req -----\r\n`, req, '\r\n----- socket -----\r\n', socket, '\r\n----- head -----\r\n', head)
           } else {
             log.info(`【fakeServer upgrade - ${hostname}:${port}】`, req.url)
@@ -154,14 +155,14 @@ module.exports = class FakeServersCenter {
           // log.error(`【fakeServer clientError - ${hostname}:${port}】\r\n----- error -----\r\n`, err, '\r\n----- socket -----\r\n', socket)
           log.error(`【fakeServer clientError - ${hostname}:${port}】\r\n`, err)
 
-          // 兼容程序：1
+          // 自动兼容程序：1
           if (port !== 443 && port !== 80) {
             if (ssl === true && err.code.indexOf('ERR_SSL_') === 0) {
               compatible.setConnectSsl(hostname, port, false)
-              log.error(`兼容程序：SSL异常，现设置为禁用ssl: ${hostname}:${port}, ssl = false`)
+              log.error(`自动兼容程序：SSL异常，现设置为禁用ssl: ${hostname}:${port}, ssl = false`)
             } else if (ssl === false && err.code === 'HPE_INVALID_METHOD') {
               compatible.setConnectSsl(hostname, port, true)
-              log.error(`兼容程序：${err.code}，现设置为启用ssl: ${hostname}:${port}, ssl = true`)
+              log.error(`自动兼容程序：${err.code}，现设置为启用ssl: ${hostname}:${port}, ssl = true`)
             }
           }
         })
@@ -176,7 +177,7 @@ module.exports = class FakeServersCenter {
         }
 
         // 其他监听事件，只打印debug日志
-        if (process.env.NODE_ENV === 'development') {
+        if (printDebugLog) {
           if (ssl) {
             fakeServer.on('keylog', (line, tlsSocket) => {
               log.debug(`【fakeServer keylog - ${hostname}:${port}】\r\n----- line -----\r\n`, line, '\r\n----- tlsSocket -----\r\n', tlsSocket)
