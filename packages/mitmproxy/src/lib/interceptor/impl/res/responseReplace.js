@@ -1,5 +1,6 @@
 const lodash = require('lodash')
 const cacheReq = require('../req/cacheReq')
+
 const REMOVE = '[remove]'
 
 // 替换响应头
@@ -20,6 +21,7 @@ function replaceResponseHeaders (newHeaders, res, proxyRes) {
     const preHeaders = {}
 
     // 替换响应头
+    const needDeleteKeys = []
     for (let i = 0; i < proxyRes.rawHeaders.length; i += 2) {
       const headerKey = proxyRes.rawHeaders[i].toLowerCase()
 
@@ -27,14 +29,18 @@ function replaceResponseHeaders (newHeaders, res, proxyRes) {
       if (newHeaderValue) {
         if (newHeaderValue !== proxyRes.rawHeaders[i + 1]) {
           preHeaders[headerKey] = proxyRes.rawHeaders[i + 1] // 先保存原先响应头
-          if (newHeaderValue === REMOVE) { // 由于拦截配置中不允许配置null，会被删，所以配置一个[remove]，当作删除响应头的意思
+          if (newHeaderValue === REMOVE) { // 由于拦截配置中不允许配置null，会被删，所以配置一个 "[remove]"，当作删除响应头的意思
             proxyRes.rawHeaders[i + 1] = ''
           } else {
             proxyRes.rawHeaders[i + 1] = newHeaderValue
           }
         }
-        delete newHeaders[headerKey]
+        needDeleteKeys.push(headerKey)
       }
+    }
+    // 处理删除响应头
+    for (const headerKey of needDeleteKeys) {
+      delete newHeaders[headerKey]
     }
     // 新增响应头
     for (const headerKey in newHeaders) {
@@ -91,20 +97,20 @@ module.exports = {
         replaceHeaders.expires = '[remove]'
       }
 
-      actions += (actions ? ',' : '') + 'download:' + filename
+      actions += `${actions ? ',' : ''}download:${filename}`
     }
 
     // 替换响应头
     if (replaceResponseHeaders(replaceHeaders, res, proxyRes)) {
-      actions += (actions ? ',' : '') + 'headers'
+      actions += `${actions ? ',' : ''}headers`
     }
 
     if (actions) {
       res.setHeader('DS-ResponseReplace-Interceptor', actions)
-      log.info('response intercept: ' + actions)
+      log.info(`response intercept: ${actions}`)
     }
   },
   is (interceptOpt) {
     return !!interceptOpt.responseReplace
-  }
+  },
 }

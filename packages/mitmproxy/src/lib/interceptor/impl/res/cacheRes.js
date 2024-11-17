@@ -6,8 +6,25 @@ module.exports = {
   responseIntercept (context, interceptOpt, req, res, proxyReq, proxyRes, ssl, next) {
     const { rOptions, log } = context
 
-    // 只有GET请求，且响应码为2xx时才进行缓存
-    if (rOptions.method !== 'GET' || proxyRes.statusCode < 200 || proxyRes.statusCode >= 300) {
+    // 只有GET请求
+    if (rOptions.method !== 'GET') {
+      return
+    }
+
+    // 判断当前响应码是否不使用缓存
+    if (interceptOpt.cacheExcludeStatusCodeList && interceptOpt.cacheExcludeStatusCodeList[`${proxyRes.statusCode}`]) {
+      return
+    }
+
+    // 响应码为 200~303 时才进行缓存（可通过以下两个参数调整范围）
+    let minStatusCode = interceptOpt.cacheMinStatusCode || 200
+    let maxStatusCode = interceptOpt.cacheMaxStatusCode || 303
+    if (minStatusCode > maxStatusCode) {
+      const temp = minStatusCode
+      minStatusCode = maxStatusCode
+      maxStatusCode = temp
+    }
+    if (proxyRes.statusCode < minStatusCode || proxyRes.statusCode > maxStatusCode) {
       // res.setHeader('DS-Cache-Response-Interceptor', `skip: 'method' or 'status' not match`)
       return
     }
@@ -15,7 +32,7 @@ module.exports = {
     // 获取maxAge配置
     let maxAge = cacheReq.getMaxAge(interceptOpt)
     // public 或 private
-    const cacheControlType = (interceptOpt.cacheControlType || 'public') + ', '
+    const cacheControlType = `${interceptOpt.cacheControlType || 'public'}, `
     // immutable属性
     const cacheImmutable = interceptOpt.cacheImmutable !== false ? ', immutable' : ''
 
@@ -24,7 +41,7 @@ module.exports = {
       cacheControl: null,
       lastModified: null,
       expires: null,
-      etag: null
+      etag: null,
     }
     for (let i = 0; i < proxyRes.rawHeaders.length; i += 2) {
       // 尝试修改rawHeaders中的cache-control、last-modified、expires
@@ -48,7 +65,7 @@ module.exports = {
     if (originalHeaders.cacheControl) {
       const maxAgeMatch = originalHeaders.cacheControl.value.match(/max-age=(\d+)/)
       if (maxAgeMatch && maxAgeMatch[1] > maxAge) {
-        if (interceptOpt.cacheImmutable !== false && originalHeaders.cacheControl.value.indexOf('immutable') < 0) {
+        if (interceptOpt.cacheImmutable !== false && !originalHeaders.cacheControl.value.includes('immutable')) {
           maxAge = maxAgeMatch[1]
         } else {
           const url = `${rOptions.method} ➜ ${rOptions.protocol}//${rOptions.hostname}:${rOptions.port}${req.url}`
@@ -64,7 +81,7 @@ module.exports = {
     const replaceHeaders = {
       cacheControl: `${cacheControlType}max-age=${maxAge + 1}${cacheImmutable}`,
       lastModified: now.toUTCString(),
-      expires: new Date(now.getTime() + maxAge * 1000).toUTCString()
+      expires: new Date(now.getTime() + maxAge * 1000).toUTCString(),
     }
     // 开始替换
     // 替换cache-control
@@ -91,5 +108,5 @@ module.exports = {
   is (interceptOpt) {
     const maxAge = cacheReq.getMaxAge(interceptOpt)
     return maxAge != null && maxAge > 0
-  }
+  },
 }
