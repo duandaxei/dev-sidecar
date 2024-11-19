@@ -1,11 +1,11 @@
-import fs from 'fs'
-import path from 'path'
+import fs from 'node:fs'
+import path from 'node:path'
 import DevSidecar from '@docmirror/dev-sidecar'
 import { ipcMain } from 'electron'
 import lodash from 'lodash'
 
-const pk = require('../../../package.json')
 const jsonApi = require('@docmirror/mitmproxy/src/json')
+const pk = require('../../../package.json')
 const log = require('../../utils/util.log')
 
 const mitmproxyPath = path.join(__dirname, 'mitmproxy.js')

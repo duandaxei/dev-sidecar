@@ -1,14 +1,12 @@
-const path = require('path')
+const path = require('node:path')
+const { defineConfig } = require('@vue/cli-service')
 const webpack = require('webpack')
 
 const publishUrl = process.env.VUE_APP_PUBLISH_URL
 const publishProvider = process.env.VUE_APP_PUBLISH_PROVIDER
 console.log('Publish url:', publishUrl)
 
-/**
- * @type {import('@vue/cli-service').ProjectOptions}
- */
-module.exports = {
+module.exports = defineConfig({
   pages: {
     index: {
       entry: 'src/main.js',
@@ -35,6 +33,9 @@ module.exports = {
   },
   pluginOptions: {
     electronBuilder: {
+      mainProcessFile: './src/background.js',
+      // Ref: https://github.com/nklayman/vue-cli-plugin-electron-builder/issues/1891
+      customFileProtocol: './',
       externals: [
         '@mihomo-party/sysproxy',
         '@mihomo-party/sysproxy-win32-ia32-msvc',
@@ -114,4 +115,4 @@ module.exports = {
       },
     },
   },
-}
+})

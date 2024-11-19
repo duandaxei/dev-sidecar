@@ -1,17 +1,12 @@
-name: Test And Upload
+name: npm run electron
 
 on:
   push:
     branches:
-      - master
-      - 1.x
-  pull_request:
-    branches:
-      - master
-      - 1.x
+      - run
 
 jobs:
-  test-and-upload:
+  npm-run-electron:
     runs-on: ${{ matrix.os }}-latest
     strategy:
       fail-fast: false
@@ -81,7 +76,7 @@ jobs:
           echo "--------------------";
           pnpm install;
 
-      - name: 'npm run electron:build'
+      - name: 'npm run electron'
         run: |
           echo "======================================================================";
           echo "cd packages/gui";
@@ -90,47 +85,6 @@ jobs:
           dir || ls -lah;
 
           echo "======================================================================";
-          echo "npm run electron:build";
+          echo "npm run electron";
           echo "--------------------";
-          npm run electron:build;
-
-          echo "======================================================================";
-          echo "cd dist_electron";
-          echo "--------------------";
-          cd dist_electron;
-          dir || ls -lah;
-
-          echo "======================================================================";
-          echo "cd ../../../";
-          echo "--------------------";
-          cd ../../../;
-          dir || ls -lah;
-
-      - name: 'Upload DevSidecar-${{ steps.package-info.outputs.version }}.exe - Windows'
-        uses: actions/upload-artifact@v4.4.0
-        if: ${{ matrix.os == 'windows' }}
-        with:
-          path: packages/gui/dist_electron/DevSidecar-${{ steps.package-info.outputs.version }}.exe
-          name: 'DevSidecar-${{ steps.package-info.outputs.version }}.exe'
-          if-no-files-found: error
-      - name: 'Upload DevSidecar-${{ steps.package-info.outputs.version }}.deb - Ubuntu'
-        uses: actions/upload-artifact@v4.4.0
-        if: ${{ matrix.os == 'ubuntu' }}
-        with:
-          path: packages/gui/dist_electron/DevSidecar-${{ steps.package-info.outputs.version }}.deb
-          name: 'DevSidecar-${{ steps.package-info.outputs.version }}.deb'
-          if-no-files-found: error
-      - name: 'Upload DevSidecar-${{ steps.package-info.outputs.version }}.AppImage - Ubuntu'
-        uses: actions/upload-artifact@v4.4.0
-        if: ${{ matrix.os == 'ubuntu' }}
-        with:
-          path: packages/gui/dist_electron/DevSidecar-${{ steps.package-info.outputs.version }}.AppImage
-          name: 'DevSidecar-${{ steps.package-info.outputs.version }}.AppImage'
-          if-no-files-found: error
-      - name: 'Upload DevSidecar-${{ steps.package-info.outputs.version }}.dmg - Mac'
-        uses: actions/upload-artifact@v4.4.0
-        if: ${{ matrix.os == 'macos' }}
-        with:
-          path: packages/gui/dist_electron/DevSidecar-${{ steps.package-info.outputs.version }}.dmg
-          name: 'DevSidecar-${{ steps.package-info.outputs.version }}.dmg'
-          if-no-files-found: error
+          npm run electron;
