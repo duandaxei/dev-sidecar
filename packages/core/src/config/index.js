@@ -22,7 +22,7 @@ module.exports = {
     remoteConfig: {
       enabled: true,
       // 共享远程配置地址
-      url: 'https://gitee.com/wangliang181230/dev-sidecar/raw/docmirror/packages/core/src/config/remote_config.json5',
+      url: 'https://gitee.com/wangliang181230/dev-sidecar/raw/docmirror/packages/core/src/config/remote_config.json',
       // 个人远程配置地址
       personalUrl: '',
     },
@@ -69,6 +69,10 @@ module.exports = {
 
       // 慢速IP延迟时间：测速超过该值时，则视为延迟高，显示为橙色
       lowSpeedDelay: 200,
+
+      // 日志相关配置
+      logFileSavePath: path.join(getUserBasePath(), '/logs'), // 日志文件保存路径
+      keepLogFileCount: 15, // 保留日志文件数
     },
     compatible: {
       // **** 自定义兼容配置 **** //
@@ -140,11 +144,6 @@ module.exports = {
           desc: '仓库内脚本，重定向改为代理，并设置响应头Content-Type。作用：方便script拦截器直接使用，避免引起跨域问题和脚本内容限制问题。',
         },
       },
-      'github-releases.githubusercontent.com': {
-        '.*': {
-          sni: 'baidu.com',
-        },
-      },
       'github.githubassets.com': {
         '.*': {
           sni: 'baidu.com',
@@ -155,9 +154,6 @@ module.exports = {
           cacheDays: 365,
           desc: '图片，缓存1年',
         },
-        '.*': {
-          sni: 'baidu.com',
-        },
       },
       'collector.github.com': {
         '.*': {
@@ -167,33 +163,20 @@ module.exports = {
       'customer-stories-feed.github.com': {
         '.*': { proxy: 'customer-stories-feed.fastgit.org' },
       },
-      'raw.githubusercontent.com': {
-        '.*': {
-          sni: 'baidu.com',
-        },
-      },
       'user-images.githubusercontent.com': {
-        '.*': {
-          sni: 'baidu.com',
-        },
         '^/.*\\.png(\\?.*)?$': {
           cacheDays: 365,
           desc: '用户在PR或issue等内容中上传的图片，缓存1年。注：每张图片都有唯一的ID，不会重复，可以安心缓存',
         },
       },
       'private-user-images.githubusercontent.com': {
-        '.*': {
-          sni: 'baidu.com',
-        },
         '^/.*\\.png(\\?.*)?$': {
-          cacheHours: 1,
-          desc: '用户在PR或issue等内容中上传的图片，缓存1小时就够了，因为每次刷新页面都是不一样的链接。',
+          cacheDays: 30,
+          cacheHours: null,
+          desc: '用户在PR或issue等内容中上传的图片，缓存30天',
         },
       },
       'avatars.githubusercontent.com': {
-        '.*': {
-          sni: 'baidu.com',
-        },
         '^/u/\\d+(\\?.*)?$': {
           cacheDays: 365,
           desc: '用户头像，缓存1年',
@@ -240,8 +223,7 @@ module.exports = {
       },
       'fonts.googleapis.com': {
         '.*': {
-          proxy: 'fonts.geekzu.org',
-          backup: ['fonts.loli.net'],
+          proxy: 'fonts.loli.net',
           test: 'https://fonts.googleapis.com/css?family=Oswald',
         },
       },
@@ -290,65 +272,94 @@ module.exports = {
     },
     // 预设置IP列表
     preSetIpList: {
-      'github.com': [
-        '4.237.22.38',
-        '20.26.156.215',
-        '20.27.177.113',
-        '20.87.245.0',
-        '20.200.245.247',
-        '20.201.28.151',
-        '20.205.243.166',
-        '140.82.113.3',
-        '140.82.114.4',
-        '140.82.116.3',
-        '140.82.116.4',
-        '140.82.121.3',
-        '140.82.121.4',
-      ],
-      'api.github.com': [
-        '20.26.156.210',
-        '20.27.177.116',
-        '20.87.245.6',
-        '20.200.245.245',
-        '20.201.28.148',
-        '20.205.243.168',
-        '20.248.137.49',
-        '140.82.112.5',
-        '140.82.113.6',
-        '140.82.116.6',
-        '140.82.121.6',
-      ],
-      'codeload.github.com': [
-        '20.26.156.216',
-        '20.27.177.114',
-        '20.87.245.7',
-        '20.200.245.246',
-        '20.201.28.149',
-        '20.205.243.165',
-        '20.248.137.55',
-        '140.82.113.9',
-        '140.82.114.10',
-        '140.82.116.10',
-        '140.82.121.9',
-      ],
-      '*.githubusercontent.com': [
-        '185.199.108.133',
-        '185.199.109.133',
-        '185.199.110.133',
-        '185.199.111.133',
-      ],
-      'github.githubassets.com': [
-        '185.199.108.154',
-        '185.199.109.154',
-        '185.199.110.154',
-        '185.199.111.154',
-      ],
-      'github.io': [
-        '185.199.108.153',
-        '185.199.109.153',
-        '185.199.110.153',
-        '185.199.111.153',
-      ],
+      'github.com': {
+        '4.237.22.38': true,
+        '20.26.156.215': true,
+        '20.27.177.113': true,
+        '20.87.245.0': true,
+        '20.200.245.247': true,
+        '20.201.28.151': true,
+        '20.205.243.166': true,
+        '140.82.113.3': true,
+        '140.82.114.4': true,
+        '140.82.116.3': true,
+        '140.82.116.4': true,
+        '140.82.121.3': true,
+        '140.82.121.4': true,
+      },
+      'api.github.com': {
+        '20.26.156.210': true,
+        '20.27.177.116': true,
+        '20.87.245.6': true,
+        '20.200.245.245': true,
+        '20.201.28.148': true,
+        '20.205.243.168': true,
+        '20.248.137.49': true,
+        '140.82.112.5': true,
+        '140.82.113.6': true,
+        '140.82.116.6': true,
+        '140.82.121.6': true,
+      },
+      'codeload.github.com': {
+        '20.26.156.216': true,
+        '20.27.177.114': true,
+        '20.87.245.7': true,
+        '20.200.245.246': true,
+        '20.201.28.149': true,
+        '20.205.243.165': true,
+        '20.248.137.55': true,
+        '140.82.113.9': true,
+        '140.82.114.10': true,
+        '140.82.116.10': true,
+        '140.82.121.9': true,
+      },
+      '*.githubusercontent.com': {
+        '146.75.92.133': true,
+        '199.232.88.133': true,
+        '199.232.144.133': true,
+      },
+      'viewscreen.githubusercontent.com': {
+        '140.82.112.21': true,
+        '140.82.112.22': true,
+        '140.82.113.21': true,
+        '140.82.113.22': true,
+        '140.82.114.21': true,
+        '140.82.114.22': true,
+      },
+      'github.io': {
+        '185.199.108.153': true,
+        '185.199.109.153': true,
+        '185.199.110.153': true,
+        '185.199.111.153': true,
+      },
+      '*.githubassets.com': {
+        '185.199.108.154': true,
+        '185.199.109.154': true,
+        '185.199.110.154': true,
+        '185.199.111.154': true,
+      },
+      '^(analytics|ghcc)\\.githubassets\\.com$': {
+        '185.199.108.153': true,
+        '185.199.110.153': true,
+        '185.199.109.153': true,
+        '185.199.111.153': true,
+      },
+      '*.pixiv.net': {
+        // 以下为 `cdn-origin.pixiv.net` 域名的IP
+        '210.140.139.154': true,
+        '210.140.139.157': true,
+        '210.140.139.160': true,
+      },
+      'hub.docker.com': {
+        '44.221.37.199': true,
+        '52.44.227.212': true,
+        '54.156.140.159': true,
+      },
+      'sessions-bugsnag.docker.com': {
+        '44.221.37.199': true,
+        '52.44.227.212': true,
+        '54.156.140.159': true,
+      },
     },
     whiteList: {
       '*.cn': true,
