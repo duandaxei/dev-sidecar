@@ -7,7 +7,7 @@ import minimist from 'minimist'
 import { createProtocol } from 'vue-cli-plugin-electron-builder/lib'
 import backend from './bridge/backend'
 import jsonApi from '@docmirror/mitmproxy/src/json'
-import log from './utils/util.log'
+import log from './utils/util.log.gui'
 
 log.info(`background.js start, platform is ${process.platform}`)
 
@@ -400,7 +400,7 @@ function registerShowHideShortcut (showHideShortcut) {
 function initApp () {
   if (isMac) {
     app.whenReady().then(() => {
-      app.dock.setIcon(path.join(__dirname, '../build/mac/512x512.png'))
+      app.dock.setIcon(path.join(__dirname, '../extra/icons/512x512.png'))
     })
   }
 
@@ -435,7 +435,7 @@ try {
   // 禁止双开
   const isFirstInstance = app.requestSingleInstanceLock()
   if (!isFirstInstance) {
-    log.info('app quit: is second instance')
+    log.info('app quit: is second instance（禁止双开）')
     setTimeout(() => {
       app.quit()
     }, 1000)
