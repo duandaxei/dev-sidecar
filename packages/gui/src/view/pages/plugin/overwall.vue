@@ -1,12 +1,16 @@
 <script>
 import Plugin from '../../mixins/plugin'
+import MockInput from '@/view/components/mock-input.vue'
 
 export default {
   name: 'Overwall',
+  components: { MockInput },
   mixins: [Plugin],
   data () {
     return {
       key: 'plugin.overwall',
+      labelCol: { span: 4 },
+      wrapperCol: { span: 20 },
       targets: undefined,
       servers: undefined,
       overwallOptions: [
@@ -40,8 +44,8 @@ export default {
       this.initServer()
     },
     async applyBefore () {
-      this.saveTarget()
-      this.saveServer()
+      this.submitTarget()
+      this.submitServer()
     },
     initTarget () {
       this.targets = []
@@ -54,17 +58,20 @@ export default {
         })
       }
     },
-    deleteTarget (item, index) {
-      this.targets.splice(index, 1)
-    },
     addTarget () {
       this.targets.unshift({ key: '', value: 'true' })
     },
-    saveTarget () {
+    deleteTarget (item, index) {
+      this.targets.splice(index, 1)
+    },
+    submitTarget () {
       const map = {}
       for (const item of this.targets) {
         if (item.key) {
-          map[item.key] = item.value === 'true'
+          const hostname = this.handleHostname(item.key)
+          if (hostname) {
+            map[hostname] = (item.value === 'true')
+          }
         }
       }
       this.config.plugin.overwall.targets = map
@@ -90,11 +97,14 @@ export default {
     addServer () {
       this.servers.unshift({ key: '', value: { type: 'path' } })
     },
-    saveServer () {
+    submitServer () {
       const map = {}
       for (const item of this.servers) {
         if (item.key) {
-          map[item.key] = item.value
+          const hostname = this.handleHostname(item.key)
+          if (hostname) {
+            map[hostname] = item.value
+          }
         }
       }
       this.config.plugin.overwall.server = map
@@ -107,9 +117,9 @@ export default {
   <ds-container>
     <template slot="header">
       梯子
-      <span>
-        <a-button type="primary" @click="openExternal('https://github.com/docmirror/dev-sidecar-doc/blob/main/ow.md')">原理说明</a-button>
-      </span>
+    </template>
+    <template slot="header-right">
+      <a-button type="primary" @click="openExternal('https://github.com/docmirror/dev-sidecar-doc/blob/main/ow.md')">原理说明</a-button>
     </template>
 
     <div v-if="config">
@@ -142,7 +152,7 @@ export default {
             注：只要下载成功后，即使关闭自动更新功能，也会优先读取最近下载的文件！
           </div>
         </a-form-item>
-        <a-form-item label="远程PAC文件地址" :label-col="labelCol" :wrapper-col="wrapperCol">
+        <a-form-item label="远程PAC文件" :label-col="labelCol" :wrapper-col="wrapperCol">
           <a-input v-model="config.plugin.overwall.pac.pacFileUpdateUrl" :title="config.plugin.overwall.pac.pacFileUpdateUrl" />
           <div class="form-help">
             远程PAC文件内容可以是<code>base64</code>编码格式，也可以是未经过编码的
@@ -160,8 +170,8 @@ export default {
               </a-col>
             </a-row>
             <a-row v-for="(item, index) of targets" :key="index" :gutter="10">
-              <a-col :span="18">
-                <a-input v-model="item.key" />
+              <a-col :span="18" class="fine-tuning">
+                <MockInput v-model="item.key" />
               </a-col>
               <a-col :span="4">
                 <a-select v-model="item.value" style="width:100%">
