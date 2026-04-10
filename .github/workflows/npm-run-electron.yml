@@ -12,6 +12,7 @@ on:
       - "**/*.md"
       - "**/.gitignore"
       - "**/LICENSE"
+  workflow_dispatch:
 
 jobs:
   npm-run-electron:
@@ -99,9 +100,15 @@ jobs:
           echo "--------------------";
           pnpm install;
 
-      - name: npm run electron (auto-exit after 30min)
+      - name: "npm run electron"
         run: |
           echo "======================================================================";
-          echo "electron with timeout";
+          echo "cd packages/gui";
           echo "--------------------";
-          node _script/run-electron-with-timeout.js packages/gui 5
+          cd packages/gui;
+          dir || ls -lah;
+
+          echo "======================================================================";
+          echo "npm run electron";
+          echo "--------------------";
+          npm run electron;
