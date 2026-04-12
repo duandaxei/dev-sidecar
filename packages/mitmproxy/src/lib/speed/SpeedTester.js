@@ -94,7 +94,9 @@ class SpeedTester {
   }
 
   async getFromOneDns (dns) {
-    return await dns._lookupWithPreSetIpList(this.hostname)
+    // TODO: 临时判断一下
+    const family = (this.hostname.includes('googlevideo.com') || this.hostname.includes('gvt1.com')) ? 6 : 4
+    return await dns._lookupWithPreSetIpList(this.hostname, { family })
   }
 
   async test () {
@@ -170,7 +172,7 @@ class SpeedTester {
       const timeout = 5000
       let timeoutId = null
 
-      const client = net.createConnection({ host, port: this.port }, () => {
+      const client = net.createConnection({ host, port: this.port, family: host.includes(':') ? 6 : 4 }, () => {
         isOver = true
         clearTimeout(timeoutId)
 
