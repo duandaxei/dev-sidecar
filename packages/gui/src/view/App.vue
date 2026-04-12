@@ -35,10 +35,8 @@ export default {
   },
   created () {
     this.menus = createMenus(this)
-    this.config = this.$global.config
-    this.$api.info.get().then((ret) => {
-      this.info = ret
-    })
+    this.refreshConfigAndInfo()
+    ipcRenderer.on('config.changed', this.onConfigChanged)
 
     ipcRenderer.on('search-bar', (_, message) => {
       if (window.config.disableSearchBar) {
@@ -90,7 +88,18 @@ export default {
       }
     })
   },
+  beforeDestroy () {
+    ipcRenderer.removeListener('config.changed', this.onConfigChanged)
+  },
   methods: {
+    async refreshConfigAndInfo () {
+      this.config = await this.$api.config.get()
+      this.$global.config = this.config
+      this.info = await this.$api.info.get()
+    },
+    onConfigChanged () {
+      this.refreshConfigAndInfo()
+    },
     getSearchBarInput () {
       return this.$refs.searchBar.$el.querySelector('input[type=text]')
     },
@@ -140,12 +149,13 @@ export default {
 <template>
   <a-config-provider :locale="locale">
     <div class="ds_layout" :class="themeClass">
-      <SearchBar ref="searchBar"
-                 :root="'#document'"
-                 :highlightClass="'search-bar-highlight'"
-                 :selectedClass="'selected-highlight'"
-                 :hiden.sync="hideSearchBar"
-                 style="inset:auto auto 53px 210px; background-color:#ddd"
+      <SearchBar
+        ref="searchBar"
+        root="#document"
+        highlight-class="search-bar-highlight"
+        selected-class="selected-highlight"
+        :hiden.sync="hideSearchBar"
+        style="inset:auto auto 53px 210px; background-color:#ddd"
       />
       <a-layout>
         <a-layout-sider :theme="theme" style="overflow-y: auto">
@@ -178,7 +188,45 @@ export default {
           </a-layout-content>
           <a-layout-footer>
             <div class="footer">
-              ©2020-2025 docmirror.cn by <a @click="openExternal('https://github.com/greper')">Greper</a>, <a @click="openExternal('https://github.com/wangliang181230')">WangLiang</a>  <span>{{ info.version }}</span>
+              <table style="margin: 0 auto">
+                <thead>
+                  <tr>
+                    <th>配置类型</th>
+                    <th>ID</th>
+                    <th>版本</th>
+                  </tr>
+                </thead>
+                <tr>
+                  <td>
+                    出厂自带
+                  </td>
+                  <td>
+                    <code>{{ (info.configProfiles && info.configProfiles.internal && info.configProfiles.internal.id) || '-' }}</code>
+                  </td>
+                  <td>
+                    <code>{{ (info.configProfiles && info.configProfiles.internal && info.configProfiles.internal.version) || '-' }}</code>
+                  </td>
+                </tr>
+                <tr>
+                  <td>共享远程</td>
+                  <td>
+                    <code>{{ (info.configProfiles && info.configProfiles.sharedRemote && info.configProfiles.sharedRemote.id) || '-' }}</code>
+                  </td>
+                  <td>
+                    <code>{{ (info.configProfiles && info.configProfiles.sharedRemote && info.configProfiles.sharedRemote.version) || '-' }}</code>
+                  </td>
+                </tr>
+                <tr>
+                  <td>个人远程</td>
+                  <td>
+                    <code>{{ (info.configProfiles && info.configProfiles.personalRemote && info.configProfiles.personalRemote.id) || '-' }}</code>
+                  </td>
+                  <td>
+                    <code>{{ (info.configProfiles && info.configProfiles.personalRemote && info.configProfiles.personalRemote.version) || '-' }}</code>
+                  </td>
+                </tr>
+              </table>
+              ©2020-2026 docmirror.cn by <a @click="openExternal('https://github.com/greper')">Greper</a>, <a @click="openExternal('https://github.com/wangliang181230')">WangLiang</a>, <a @click="openExternal('https://github.com/cute-omega')">CuteOmega</a>  <span>{{ info.version }}</span>
             </div>
           </a-layout-footer>
         </a-layout>

@@ -11,6 +11,11 @@ function getRootCaKeyPath () {
 
 const defaultConfig = {
   app: {
+    metaInfo: {
+      updateLog: 'GUI v2.0.2自带配置',
+      version: '202604122348',
+      id: 'internal',
+    },
     mode: 'default',
     autoStart: {
       enabled: false,
@@ -374,31 +379,21 @@ const defaultConfig = {
     },
     dns: {
       providers: {
-        aliyun: {
-          type: 'https',
-          server: 'https://dns.alidns.com/dns-query',
-          cacheSize: 1000,
-        },
-        cloudflare: {
-          type: 'https',
-          server: 'https://1.1.1.1/dns-query',
-          cacheSize: 1000,
-        },
-        quad9: {
-          type: 'https',
-          server: 'https://9.9.9.9/dns-query',
-          cacheSize: 1000,
-        },
         safe360: {
-          type: 'https',
-          server: 'https://doh.360.cn/dns-query',
-          cacheSize: 1000,
+          server: 'tls://dot.360.cn',
           forSNI: true,
         },
+        aliyun: {
+          server: 'tls://dns.alidns.com',
+        },
+        cloudflare: {
+          server: 'https://1.1.1.1/dns-query',
+        },
+        quad9: {
+          server: 'https://9.9.9.9/dns-query',
+        },
         rubyfish: {
-          type: 'https',
           server: 'https://rubyfish.cn/dns-query',
-          cacheSize: 1000,
         },
       },
       mapping: {
