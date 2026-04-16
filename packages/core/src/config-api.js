@@ -104,7 +104,7 @@ const configApi = {
 
           let message
           if (response) {
-            message = `下载远程配置失败: ${remoteConfigUrl}, message: ${response.message}, code: ${response.statusCode}`
+            message = `下载远程配置失败: ${remoteConfigUrl}, message: ${response.statusMessage}, code: ${response.statusCode}`
           } else {
             message = `下载远程配置失败: response: ${response}`
           }
@@ -280,7 +280,7 @@ const configApi = {
     const noSetList = list.filter((item) => {
       return !item.exists
     })
-    if (list.length > 0) {
+    if (noSetList.length > 0) {
       const context = {
         root_ca_cert_path: configApi.get().server.setting.rootCaFile.certPath,
       }
