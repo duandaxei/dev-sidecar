@@ -145,7 +145,7 @@ module.exports = function createRequestHandler (createIntercepts, middlewares, e
           // log.debug('rOptions:', rOptions.hostname + rOptions.path, '\r\n', rOptions)
           // log.debug('agent:', rOptions.agent)
           // log.debug('agent.options:', rOptions.agent.options)
-          res.setHeader('DS-Proxy-Request', rOptions.hostname)
+          res.setHeader('DS-Proxy-Request', `${rOptions.protocol}//${rOptions.hostname}:${rOptions.port}${req.url}`)
 
           // 自动兼容程序：2
           if (rOptions.agent) {
@@ -225,7 +225,7 @@ module.exports = function createRequestHandler (createIntercepts, middlewares, e
             }
             reject(new Error(errorMsg))
           })
-          req.on('error', (e, req, res) => {
+          req.on('error', (e) => {
             const cost = Date.now() - start
             log.error(`请求错误: ${url}, cost: ${cost} ms, error:`, e, ', rOptions:', jsonApi.stringify2(rOptions))
             reject(e)
