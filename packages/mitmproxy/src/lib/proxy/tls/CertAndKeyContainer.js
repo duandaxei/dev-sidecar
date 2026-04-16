@@ -26,7 +26,7 @@ module.exports = class CertAndKeyContainer {
   }
 
   getCertPromise (hostname, port, dnsName, mappingHostNames) {
-    for (let i = 0; i < this.queue.length; i++) {
+    for (let i = this.queue.length - 1; i >= 0; i--) {
       const _certPromiseObj = this.queue[i]
       const certMappingHostNames = _certPromiseObj.mappingHostNames
       for (let j = 0; j < certMappingHostNames.length; j++) {
@@ -43,12 +43,8 @@ module.exports = class CertAndKeyContainer {
       mappingHostNames,
     }
 
-    const promise = new Promise((resolve, _reject) => {
-      log.info(`【CreateFakeCertificate】dnsName: ${dnsName}, hostname: ${hostname}:${port}`)
-
-      const certObj = tlsUtils.createFakeCertificateByDomain(this.caKey, this.caCert, dnsName, mappingHostNames)
-      resolve(certObj)
-    })
+    log.info(`【CreateFakeCertificate】dnsName: ${dnsName}, hostname: ${hostname}:${port}`)
+    const promise = tlsUtils.createFakeCertificateByDomain(this.caKey, this.caCert, dnsName, mappingHostNames)
 
     certPromiseObj.promise = promise
     this.addCertPromise(certPromiseObj)
