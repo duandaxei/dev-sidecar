@@ -346,13 +346,13 @@ module.exports = function createRequestHandler (createIntercepts, middlewares, e
           <p>目标网站请求错误：【${e.code}】 ${e.message}</p>
           <p>目标地址：${rOptions.protocol}//${rOptions.hostname}:${rOptions.port}${rOptions.path}</p>`,
           )
-        } catch (e) {
+        } catch {
           // do nothing
         }
 
         try {
           res.end()
-        } catch (e) {
+        } catch {
           // do nothing
         }
 
