@@ -194,17 +194,17 @@ export default {
           <div class="aside">
             <a-menu
               mode="inline"
-              :default-selected-keys="['item-'+$route.fullPath, 'subitem-'+$route.fullPath]"
+              :default-selected-keys="[`item-${$route.fullPath}`, `subitem-${$route.fullPath}`]"
               :default-open-keys="['sub-/plugin']"
             >
               <template v-for="(item) of menus">
-                <a-sub-menu v-if="item.children && item.children.length > 0" :key="'sub-'+item.path" @titleClick="titleClick(item)">
+                <a-sub-menu v-if="item.children && item.children.length > 0" :key="`sub-${item.path}`" @titleClick="titleClick(item)">
                   <span slot="title"><a-icon :type="item.icon ? item.icon : 'file'" /><span>{{ item.title }}</span></span>
-                  <a-menu-item v-for="(sub) of item.children" :key="'subitem-'+sub.path" @click="menuClick(sub)">
+                  <a-menu-item v-for="(sub) of item.children" :key="`subitem-${sub.path}`" @click="menuClick(sub)">
                     <a-icon :type="sub.icon ? sub.icon : 'file'" /> {{ sub.title }}
                   </a-menu-item>
                 </a-sub-menu>
-                <a-menu-item v-else :key="'item-'+item.path" @click="menuClick(item)">
+                <a-menu-item v-else :key="`item-${item.path}`" @click="menuClick(item)">
                   <a-icon :type="item.icon ? item.icon : 'file'" />
                   <span class="nav-text">{{ item.title }}</span>
                 </a-menu-item>
