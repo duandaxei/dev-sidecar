@@ -3,6 +3,11 @@ const net = require('node:net')
 const log = require('../../../utils/util.log.server')
 const speedTest = require('../../speed')
 
+// HTTP/2 头值只允许 ASCII 可见字符，需过滤中文等非 ASCII 字符
+function safeHeaderValue (value) {
+  return String(value).replace(/[^\x20-\x7E]/g, '')
+}
+
 function isValidIpAddress (ip) {
   return typeof ip === 'string' && net.isIP(ip) !== 0
 }
@@ -59,7 +64,8 @@ module.exports = {
           const addressFamily = getAddressFamily(aliveIpObj.host)
           log.info(`----- ${action}: ${hostname}, use alive ip from dns '${aliveIpObj.dns}': ${aliveIpObj.host}${target} -----`)
           if (res) {
-            res.setHeader('DS-DNS-Lookup', `IpTester: ${aliveIpObj.host} ${aliveIpObj.dns === '预设IP' ? 'PreSet' : aliveIpObj.dns}`)
+            const dnsLabel = aliveIpObj.dns === '预设IP' ? 'PreSet' : safeHeaderValue(aliveIpObj.dns)
+            res.setHeader('DS-DNS-Lookup', `IpTester: ${aliveIpObj.host} ${dnsLabel}`)
           }
           respondLookup(callback, aliveIpObj.host, addressFamily, all)
           return
@@ -70,6 +76,18 @@ module.exports = {
 
       const ipChecker = createIpChecker(tester)
 
+      // 无已测速的存活 IP，轮转分配未失败 IP 逐个探测，并发请求自动分散
+      if (tester && tester.backupList.length > 0) {
+        const probe = tester.pickNextForProbing()
+        if (probe && isValidIpAddress(probe.host)) {
+          const addressFamily = getAddressFamily(probe.host)
+          log.info(`----- ${action}: ${hostname}, use probing ip: ${probe.host} (family: ${addressFamily})${target} -----`)
+          if (isDnsIntercept) { isDnsIntercept.tester = tester }
+          respondLookup(callback, probe.host, addressFamily, all)
+          return
+        }
+      }
+
       dns.lookup(hostname, { ipChecker, family }).then((ip) => {
         if (ip !== hostname && isValidIpAddress(ip)) {
           const addressFamily = getAddressFamily(ip)
@@ -77,10 +95,12 @@ module.exports = {
             isDnsIntercept.dns = dns
             isDnsIntercept.hostname = hostname
             isDnsIntercept.ip = ip
+            if (tester) isDnsIntercept.tester = tester
           }
           log.info(`----- ${action}: ${hostname}, use ip from dns '${dns.dnsName}': ${ip}(family: ${addressFamily})${target} -----`)
           if (res) {
-            res.setHeader('DS-DNS-Lookup', `DNS: ${ip}（IPv${addressFamily}） ${dns.dnsName === '预设IP' ? 'PreSet' : dns.dnsName}`)
+            const dnsLabel = dns.dnsName === '预设IP' ? 'PreSet' : safeHeaderValue(dns.dnsName)
+            res.setHeader('DS-DNS-Lookup', `DNS: ${ip} (IPv${addressFamily}) ${dnsLabel}`)
           }
           respondLookup(callback, ip, addressFamily, all)
         } else {
