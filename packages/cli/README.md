@@ -48,9 +48,14 @@ pnpm --filter @docmirror/mitmproxy test
 ```
 packages/cli/
 ├── cli.js                    # bin 入口，路由到 src/index.js
+├── sea-config.json           # SEA 打包配置
+├── scripts/
+│   └── build.js              # SEA 打包脚本（支持 --all 交叉编译）
 ├── src/
 │   ├── index.js              # 主入口，命令路由 + 守护进程模式
+│   ├── sea-entry.js          # SEA 入口，同进程启动代理
 │   ├── banner.txt            # ASCII art banner
+│   ├── mitmproxy.js          # fork 模式的代理入口
 │   ├── plugin-worker.js      # 插件操作临时子进程
 │   ├── free-eye-worker.js    # free_eye 测试临时子进程
 │   └── commands/
@@ -59,13 +64,15 @@ packages/cli/
 │       ├── restart.js        # restart 逻辑
 │       ├── status.js         # status 逻辑
 │       ├── plugin.js         # plugin 命令路由 + overwall 解锁检测
+│       ├── service.js        # 开机自启动 (systemd/launchd/注册表)
 │       └── gui.js            # GUI 启停 + 端口检测
 └── test/
     ├── start.test.js         # 端口检测、配置读取、PID 逻辑测试
     ├── plugin.test.js        # 插件列表、overwall 解锁测试
     ├── status.test.js        # 状态格式化、文件逻辑测试
     ├── gui.test.js           # 端口检测、GUI 检测测试
-    └── index.test.js         # 命令路由解析测试
+    ├── service.test.js       # 开机自启动测试
+    └── index.test.js         # 命令路由、help、version 测试
 ```
 
 ### 添加新命令
@@ -89,6 +96,8 @@ ds-cli status                 # 显示 CLI 运行状态
 ds-cli version                # 显示版本号
 ds-cli plugin start <name>    # 启动单个插件
 ds-cli plugin stop <name>     # 停止单个插件
+ds-cli service install        # 注册开机自启动
+ds-cli service uninstall      # 移除开机自启动
 ```
 
 ### GUI 操作参数
@@ -135,6 +144,7 @@ ds-cli status
 dev-sidecar 运行状态:
   代理服务:  运行中
   系统代理:  已开启
+  开机启动:  已注册
   GUI:       未运行
   插件:
     git       已启用
@@ -174,6 +184,21 @@ ds-cli plugin stop git        # 停止 git 加速
   PASS github.com - 连接成功
 ```
 
+### 开机自启动
+
+```bash
+ds-cli service install        # 注册开机自启动
+ds-cli service uninstall      # 移除
+```
+
+各平台实现：
+
+| 平台 | 机制 | 说明 |
+|------|------|------|
+| Linux | systemd user service | 自动重启崩溃进程，`systemctl --user` 管理 |
+| macOS | launchd | `~/Library/LaunchAgents/com.dev-sidecar.cli.plist` |
+| Windows | 注册表 Run 键 | `HKCU\...\Run`，不依赖 Task Scheduler |
+
 ## 启动流程
 
 执行 `ds-cli`（或 `ds-cli start`）后：
@@ -211,6 +236,37 @@ ds-cli plugin stop <name>         # fork 临时子进程停止指定插件后退
 ## 日志
 
 日志写入 `~/.dev-sidecar/logs/core.log`，按日期轮转，支持压缩。
+
+## 构建打包
+
+CLI 使用 Node.js SEA（Single Executable Applications）打包为单个可执行文件。
+
+### 一键打包
+
+```bash
+# 打包本机平台（自动识别）
+node packages/cli/scripts/build.js
+
+# 打包所有平台（交叉编译）
+node packages/cli/scripts/build.js --all
+```
+
+脚本自动完成：esbuild 打包 → SEA blob 生成 → 下载 Node.js 二进制 → 注入 blob → 验证。
+
+### 输出产物
+
+打包完成后在 `packages/cli/dist/` 下生成：
+
+| 命令 | 产物 |
+|------|------|
+| `node scripts/build.js` | `ds-cli-<version>-<本机平台>` |
+| `node scripts/build.js --all` | 5 个平台的二进制 |
+
+支持的平台：`linux-x64`、`linux-arm64`、`macos-x64`、`macos-arm64`、`windows-x64`。
+
+### 自动构建（CI）
+
+推送到 `release*` 分支或 `v*` 标签时，GitHub Actions 自动构建所有平台。打 `v*` 标签时自动创建 GitHub Release（draft 模式）。
 
 ## 测试
 
