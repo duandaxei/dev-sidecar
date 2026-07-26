@@ -3,6 +3,26 @@ const fs = require('node:fs')
 const path = require('node:path')
 const jsonApi = require('@docmirror/mitmproxy/src/json')
 
+function getUserBase () {
+  return path.join(process.env.USERPROFILE || process.env.HOME || '/', '.dev-sidecar')
+}
+
+function readConfig () {
+  const configPath = path.join(getUserBase(), 'config.json')
+  if (!fs.existsSync(configPath)) return {}
+  try {
+    return jsonApi.parse(fs.readFileSync(configPath, 'utf-8'))
+  } catch {
+    return {}
+  }
+}
+
+function writeConfig (config) {
+  const configPath = path.join(getUserBase(), 'config.json')
+  fs.mkdirSync(path.dirname(configPath), { recursive: true })
+  fs.writeFileSync(configPath, jsonApi.stringify(config))
+}
+
 function getValidPlugins () {
   return Object.keys(require('@docmirror/dev-sidecar/src/modules/plugin'))
 }
@@ -50,7 +70,7 @@ function handlePlugin (action, name) {
     process.exit(1)
   }
 
-  // free_eye 是一次性测试功能，无持久开关状态
+  // free_eye 是一次性测试功能，直接 fork 执行
   if (name === 'free_eye') {
     if (action === 'stop') {
       console.log('free_eye 是一次性测试功能，stop 命令不适用')
@@ -64,9 +84,17 @@ function handlePlugin (action, name) {
     return
   }
 
+  // git/node/pip 不依赖代理服务，fork worker 立即生效
   const workerPath = path.join(__dirname, '../plugin-worker.js')
   const child = fork(workerPath, [action, name])
   child.on('exit', (code) => {
+    // 同时持久化到 config.json（重启后生效）
+    const config = readConfig()
+    config.plugin = config.plugin || {}
+    config.plugin[name] = config.plugin[name] || {}
+    config.plugin[name].enabled = action === 'start'
+    writeConfig(config)
+    console.log(`已${action === 'start' ? '启用' : '禁用'}插件 ${name}`)
     process.exit(code || 0)
   })
 }

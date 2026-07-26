@@ -79,8 +79,10 @@ function printHelp () {
   restart                   重启守护进程
   status                    显示运行状态
   version                   显示版本号
-  plugin start <name>       启动插件 (git/node/pip/overwall/free_eye)
-  plugin stop <name>        停止插件
+  proxy on                  开启系统代理
+  proxy off                 关闭系统代理
+  plugin start <name>       启用插件 (git/node/pip/overwall/free_eye)
+  plugin stop <name>        禁用插件
   service install           注册开机自启动
   service uninstall         移除开机自启动
   help                      显示此帮助信息
@@ -146,6 +148,28 @@ function routeCommand (args) {
     case 'plugin': {
       const { handlePlugin } = require('./commands/plugin')
       handlePlugin(value, positional[2])
+      break
+    }
+    case 'proxy': {
+      const { readConfig, writeConfig } = require('./commands/gui')
+      if (value === 'on' || value === 'off') {
+        // 持久化到 config.json
+        const config = readConfig()
+        config.proxy = config.proxy || {}
+        config.proxy.enabled = value === 'on'
+        writeConfig(config)
+
+        // fork worker 立即设置/取消系统代理
+        const { fork } = require('node:child_process')
+        const workerPath = path.join(__dirname, 'proxy-worker.js')
+        const child = fork(workerPath, [value])
+        child.on('exit', (code) => {
+          process.exit(code || 0)
+        })
+      } else {
+        console.error('用法: ds-cli proxy <on|off>')
+        process.exit(1)
+      }
       break
     }
     case 'service': {
