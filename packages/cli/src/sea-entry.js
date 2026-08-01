@@ -8,7 +8,6 @@ const lodash = require('lodash')
 
 const userBase = path.join(process.env.USERPROFILE || process.env.HOME || '/', '.dev-sidecar')
 const PID_FILE = path.join(userBase, 'ds-cli.pid')
-const STATUS_FILE = path.join(userBase, 'status.json')
 
 // ── 加载配置 ──────────────────────────────────────────
 
@@ -102,6 +101,27 @@ async function runDaemon () {
   const log = require('@docmirror/dev-sidecar/src/utils/util.log-or-console')
 
   async function startup () {
+    const log = require('@docmirror/dev-sidecar/src/utils/util.log-or-console')
+
+    // 获取实例锁，防止 CLI/GUI 重复运行
+    const DevSidecar = require('@docmirror/dev-sidecar')
+    try {
+      await DevSidecar.api.instance.acquireLock({ log })
+    } catch (e) {
+      log.error('另一个 dev-sidecar 实例正在运行，CLI 启动失败:', e.message)
+      process.exit(1)
+    }
+    try {
+      await DevSidecar.api.instance.writeInstance({
+        type: 'cli',
+        pid: process.pid,
+        command: process.argv.join(' '),
+        startTime: new Date().toISOString(),
+      })
+    } catch (e) {
+      log.error('写入 running.json 实例信息失败:', e.message)
+    }
+
     const BANNER = `    ____                 _____ _     __
    / __ \\___ _   __     / ___/(_)___/ /__  _________ ______
   / / / / _ \\ | / /_____\\__ \\/ / __  / _ \\/ ___/ __ \`/ ___/
@@ -115,30 +135,32 @@ async function runDaemon () {
     const allConfig = loadConfig()
     const serverConfig = prepareServerConfig(allConfig)
 
-    // 写入 running.json（供调试）
+    // 写入 running.json（供调试），保留现有 instance 信息
     const runningConfigPath = path.join(userBase, 'running.json')
     try {
       const jsonApi = require('@docmirror/mitmproxy/src/json')
+      let existingInstance
+      if (fs.existsSync(runningConfigPath)) {
+        try {
+          const existing = JSON.parse(fs.readFileSync(runningConfigPath, 'utf-8'))
+          existingInstance = existing?.app?.instance
+        } catch {}
+      }
+      if (existingInstance) {
+        if (!serverConfig.app) {
+          serverConfig.app = {}
+        }
+        serverConfig.app.instance = existingInstance
+      }
       fs.writeFileSync(runningConfigPath, jsonApi.stringify(serverConfig))
     } catch {}
 
     const mitmproxy = await startProxy(serverConfig)
     log.info('dev-sidecar 已启动（同进程模式）')
 
-    // 定期写入 status.json
-    writeStatus()
-    setInterval(writeStatus, 5000)
-  }
-
-  function writeStatus () {
-    try {
-      const status = {
-        server: { enabled: true },
-        proxy: { enabled: false },
-        plugin: {},
-      }
-      fs.writeFileSync(STATUS_FILE, JSON.stringify(status, null, 2))
-    } catch {}
+    // 主动同步状态到 running.json（SEA 模式不走 core 的 server/proxy 模块，状态事件不会自动触发）
+    DevSidecar.api.instance.updateStatus('server.enabled', true)
+    DevSidecar.api.instance.updateStatus('proxy.enabled', !!(allConfig.proxy && allConfig.proxy.enabled))
   }
 
   async function onClose () {
@@ -155,7 +177,6 @@ async function runDaemon () {
 
   function cleanupFiles () {
     try { if (fs.existsSync(PID_FILE)) fs.unlinkSync(PID_FILE) } catch {}
-    try { if (fs.existsSync(STATUS_FILE)) fs.unlinkSync(STATUS_FILE) } catch {}
   }
 
   process.on('SIGINT', onClose)
@@ -165,13 +186,22 @@ async function runDaemon () {
   await startup()
 }
 
-function routeCommand (args) {
+async function routeCommand (args) {
   const flags = args.filter(a => a.startsWith('--'))
   const positional = args.filter(a => !a.startsWith('--'))
   const command = positional[0] || 'start'
 
   switch (command) {
     case 'start': {
+      // 锁检查：锁被持有说明 CLI 或 GUI 已在运行
+      const DevSidecar = require('@docmirror/dev-sidecar')
+      if (await DevSidecar.api.instance.isLocked()) {
+        const instance = await DevSidecar.api.instance.readInstance()
+        const typeLabel = instance?.type === 'gui' ? 'GUI' : 'CLI'
+        console.log(`dev-sidecar ${typeLabel} 已在运行中${instance?.pid ? `（PID: ${instance.pid}）` : ''}，请先关闭后再启动 CLI`)
+        process.exit(0)
+        break
+      }
       const { fork } = require('node:child_process')
       const child = fork(__filename, ['--daemon'], { detached: true, stdio: 'ignore' })
       child.unref()
@@ -193,9 +223,7 @@ function routeCommand (args) {
     }
     case 'status': {
       const { showStatus } = require('./commands/status')
-      const { isGuiRunning } = require('./commands/gui')
-      showStatus()
-      console.log(`  GUI:       ${isGuiRunning() ? '运行中' : '未运行'}`)
+      showStatus().then(() => process.exit(0))
       break
     }
     case 'version': {
