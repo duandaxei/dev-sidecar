@@ -138,26 +138,24 @@ function mapNodePlatform (nodePlatform) {
 
 // ── 增量构建 ──────────────────────────────────────────
 
+function hashDir (hash, dir) {
+  if (!fs.existsSync(dir)) return
+  for (const f of fs.readdirSync(dir, { recursive: true })) {
+    if (f.endsWith('.js')) {
+      hash.update(fs.readFileSync(path.join(dir, f)))
+    }
+  }
+}
+
 function computeSourceHash () {
   const hash = crypto.createHash('sha256')
   // 入口文件
   hash.update(fs.readFileSync(path.join(ROOT, 'src/sea-entry.js')))
   // src/ 下所有 js 文件
-  const srcDir = path.join(ROOT, 'src')
-  for (const f of fs.readdirSync(srcDir, { recursive: true })) {
-    if (f.endsWith('.js') && f !== 'sea-entry.js') {
-      hash.update(fs.readFileSync(path.join(srcDir, f)))
-    }
-  }
-  // commands 目录
-  const cmdDir = path.join(srcDir, 'commands')
-  if (fs.existsSync(cmdDir)) {
-    for (const f of fs.readdirSync(cmdDir, { recursive: true })) {
-      if (f.endsWith('.js')) {
-        hash.update(fs.readFileSync(path.join(cmdDir, f)))
-      }
-    }
-  }
+  hashDir(hash, path.join(ROOT, 'src'))
+  // 打包进 bundle 的依赖源码（core / mitmproxy）
+  hashDir(hash, path.join(ROOT, '../core/src'))
+  hashDir(hash, path.join(ROOT, '../mitmproxy/src'))
   // package.json（版本号变化也应触发重建）
   hash.update(fs.readFileSync(path.join(ROOT, 'package.json')))
   return hash.digest('hex')
@@ -209,35 +207,36 @@ async function main () {
 
     // Step 1: esbuild
     console.log('==> Step 1: esbuild 打包...')
-    execSync(
-      `npx esbuild src/sea-entry.js --bundle --platform=node --target=node18 --format=cjs --outfile="${bundle}" "--external:node:*" "--external:@docmirror/dev-sidecar/src/modules/plugin/free-eye/*"`,
-      { cwd: ROOT, stdio: 'inherit' },
-    )
+    const esbuild = require('esbuild')
+    await esbuild.build({
+      entryPoints: [path.join(ROOT, 'src/sea-entry.js')],
+      bundle: true,
+      platform: 'node',
+      target: 'node18',
+      format: 'cjs',
+      outfile: bundle,
+      external: [
+        'node:*',
+        // 原生 .node 模块无法打进 SEA bundle，运行时 require 失败会被调用方 try/catch 兜底
+        '@starknt/sysproxy',
+        // free-eye 为 ESM 模块且依赖源码目录数据，独立可执行文件中不可用；
+        // core 以相对路径 require 它，必须用通配符匹配，包名前缀匹配不到
+        '*free-eye',
+      ],
+    })
     const bundleSize = (fs.statSync(bundle).size / 1024 / 1024).toFixed(1)
     console.log(`    完成: ${bundle} (${bundleSize}MB)\n`)
-
-    // Step 2: SEA blob
-    console.log('==> Step 2: 生成 SEA blob...')
-    const seaConfig = path.join(DIST, 'sea-config.json')
-    fs.writeFileSync(seaConfig, JSON.stringify({
-      main: bundle,
-      output: blob,
-      disableExperimentalSEAWarning: true,
-    }))
-    execSync(`node --experimental-sea-config "${seaConfig}"`, { stdio: 'inherit' })
-    saveBuildHash(currentHash)
-    console.log()
   }
 
-  // Step 3: 获取校验和 + 确定目标平台
-  console.log('==> Step 3: 获取平台信息和校验和...')
+  // Step 2: 获取校验和 + 确定目标平台
+  console.log('==> Step 2: 获取平台信息和校验和...')
   const { checksums, platforms: availablePlatforms } = await fetchChecksums()
   const targets = buildAll ? availablePlatforms : [currentPlatform]
   console.log(`    目标平台: ${targets.join(', ')}`)
   console.log()
 
-  // Step 4: 并行下载 Node.js 二进制
-  console.log('==> Step 4: 下载 Node.js 二进制（并行）...')
+  // Step 3: 并行下载 Node.js 二进制
+  console.log('==> Step 3: 下载 Node.js 二进制（并行）...')
   const downloadTasks = targets.map(platform => downloadNodeBinary(platform, checksums))
   const results = await Promise.allSettled(downloadTasks)
 
@@ -254,6 +253,24 @@ async function main () {
   }
   if (downloadFailed) process.exit(1)
   console.log()
+
+  // Step 4: 生成 SEA blob
+  // 使用已下载的当前平台 node 二进制生成 blob，保证 blob 与目标运行时（NODE_VERSION）完全一致，
+  // 避免 host node 版本与运行时版本不兼容导致的 "v8::ToLocalChecked Empty MaybeLocal" 崩溃
+  if (!skipBuild) {
+    console.log('==> Step 4: 生成 SEA blob...')
+    const seaConfig = path.join(DIST, 'sea-config.json')
+    fs.writeFileSync(seaConfig, JSON.stringify({
+      main: bundle,
+      output: blob,
+      disableExperimentalSEAWarning: true,
+    }))
+    const blobNode = path.join(DIST, 'node-bin', `node-${currentPlatform}`)
+    const seaNode = fs.existsSync(blobNode) ? blobNode : process.execPath
+    execSync(`"${seaNode}" --experimental-sea-config "${seaConfig}"`, { stdio: 'inherit' })
+    saveBuildHash(currentHash)
+    console.log()
+  }
 
   // Step 5: 注入 blob
   console.log('==> Step 5: 注入 SEA blob...')
@@ -289,8 +306,12 @@ async function main () {
         console.error(`    验证失败: 期望 v${VERSION}, 实际 ${result}`)
         process.exit(1)
       }
+      // 冒烟测试：加载 core（校验 bundle 完整性，如 free-eye 等外部模块是否正确排除）
+      execSync(`"${verifyBin}" status`, { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] })
+      console.log('    冒烟测试通过: status')
     } catch (e) {
       console.error(`    验证失败: ${e.message}`)
+      process.exit(1)
     }
   }
   console.log()
